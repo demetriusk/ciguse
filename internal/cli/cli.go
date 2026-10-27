@@ -47,6 +47,8 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 		return runReport(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
+	case "hook":
+		return runHook(args[1:])
 	case "version", "--version":
 		fmt.Fprintln(stdout, "ciguse", version)
 		return 0
@@ -297,7 +299,7 @@ func openStore(stderr io.Writer) (*store.Store, int) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fail(stderr, err)
 	}
-	s, err := store.Open(filepath.Join(dir, "ciguse.db"))
+	s, err := store.Open(filepath.Join(dir, "ciguse.db"), 2*time.Second)
 	if err != nil {
 		return nil, fail(stderr, err)
 	}

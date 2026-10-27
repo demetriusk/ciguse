@@ -1,0 +1,26 @@
+{
+  "description": "Records agent working/waiting state for ciguse. Each hook runs the ciguse binary directly, with no shell.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "SessionStart"], "async": true }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "UserPromptSubmit"], "timeout": 5 }] }
+    ],
+    "PostToolUse": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "PostToolUse"], "async": true }] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "PermissionRequest"], "async": true }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "Stop"], "async": true }] }
+    ],
+    "StopFailure": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "StopFailure"], "async": true }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "SessionEnd"] }] }
+    ]
+  }
+}

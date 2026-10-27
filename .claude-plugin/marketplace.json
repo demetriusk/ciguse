@@ -1,0 +1,12 @@
+{
+  "name": "ciguse",
+  "owner": { "name": "demetriusk" },
+  "description": "Claude Code plugin for ciguse, a local nicotine-use logger.",
+  "plugins": [
+    {
+      "name": "ciguse",
+      "source": "./plugin",
+      "description": "Records when Claude Code is working and when it's waiting on you, for ciguse."
+    }
+  ]
+}

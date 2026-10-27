@@ -15,7 +15,7 @@ var base = time.Date(2026, 10, 27, 12, 0, 0, 0, cet)
 
 func open(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "ciguse.db"))
+	s, err := Open(filepath.Join(t.TempDir(), "ciguse.db"), 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestConcurrentLogsFromSeparateProcessesStoreOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			s, err := Open(path) // fresh database: migrations race too
+			s, err := Open(path, 2*time.Second) // fresh database: migrations race too
 			if err != nil {
 				errs <- err
 				return

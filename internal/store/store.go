@@ -55,12 +55,35 @@ CREATE TABLE events (
 	deleted_at       INTEGER
 );
 CREATE INDEX events_ts ON events(ts) WHERE deleted_at IS NULL;
+`, `
+CREATE TABLE projects (
+	project_key TEXT PRIMARY KEY,
+	alias       TEXT NOT NULL,
+	created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE sessions (
+	session_key  TEXT PRIMARY KEY,
+	project_key  TEXT NOT NULL REFERENCES projects(project_key),
+	started_at   INTEGER NOT NULL,
+	last_seen_at INTEGER NOT NULL
+);
+
+CREATE TABLE transitions (
+	id          INTEGER PRIMARY KEY,
+	session_key TEXT NOT NULL REFERENCES sessions(session_key),
+	ts          INTEGER NOT NULL,
+	state       TEXT NOT NULL,
+	cause       TEXT NOT NULL
+);
+CREATE INDEX transitions_session_ts ON transitions(session_key, ts);
 `}
 
 type Store struct{ db *sql.DB }
 
 // Open opens or creates the database at path and brings its schema up to date.
-func Open(path string) (*Store, error) {
+// busy is how long to wait for another process's lock before giving up.
+func Open(path string, busy time.Duration) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
@@ -68,7 +91,7 @@ func Open(path string) (*Store, error) {
 	// One connection per process: pragmas apply to it and BEGIN IMMEDIATE stays on it.
 	db.SetMaxOpenConns(1)
 	s := &Store{db}
-	if err := s.setup(); err != nil {
+	if err := s.setup(busy); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -78,15 +101,15 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) setup() error {
-	for _, p := range []string{"PRAGMA busy_timeout = 2000", "PRAGMA foreign_keys = ON"} {
+func (s *Store) setup(busy time.Duration) error {
+	for _, p := range []string{fmt.Sprintf("PRAGMA busy_timeout = %d", busy.Milliseconds()), "PRAGMA foreign_keys = ON"} {
 		if _, err := s.db.Exec(p); err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
 	}
 	// Switching a new file to WAL can return SQLITE_BUSY without consulting the busy
 	// timeout when several processes create the database at once, so retry briefly.
-	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+	for deadline := time.Now().Add(busy); ; time.Sleep(10 * time.Millisecond) {
 		_, err := s.db.Exec("PRAGMA journal_mode = WAL")
 		if err == nil {
 			break

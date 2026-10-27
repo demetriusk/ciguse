@@ -47,9 +47,19 @@ ciguse init --day-start 04:00   # late nights count toward the previous day
 
 A second log within 90 seconds is treated as an accidental repeat and skipped; `--force` logs it anyway.
 
+## Claude Code
+
+The plugin records when Claude Code is working and when it's waiting on you. It needs ciguse 0.2.0 or later on your PATH: update first (`brew upgrade ciguse`), because older versions block every prompt when the plugin calls them.
+
+```text
+/plugin install ciguse --marketplace demetriusk/ciguse
+```
+
+Per session it stores a keyed session id, a keyed project path, the repository's folder name, and when the state changed. Prompts, tool input, file paths and transcripts are never read into storage.
+
 ## Data
 
-One SQLite file, readable only by your user:
+A SQLite file, the key used to hide session ids and paths, and an error log for the plugin, all readable only by your user:
 
 - macOS: `~/Library/Application Support/ciguse/ciguse.db`
 - Linux: `$XDG_DATA_HOME/ciguse/ciguse.db` (default `~/.local/share/ciguse`)

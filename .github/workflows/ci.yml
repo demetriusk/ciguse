@@ -19,6 +19,9 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test ./...
+      - run: go test -run Latency -v .
+        env:
+          CIGUSE_LATENCY: "1"
       - run: go build .
         env:
           CGO_ENABLED: "0"

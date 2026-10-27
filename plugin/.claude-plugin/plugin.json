@@ -1,0 +1,9 @@
+{
+  "name": "ciguse",
+  "version": "0.2.0",
+  "description": "Records when Claude Code is working and when it's waiting on you, so ciguse can compare your nicotine use across the two. Needs the ciguse binary 0.2.0 or later on your PATH.",
+  "author": { "name": "demetriusk" },
+  "homepage": "https://github.com/demetriusk/ciguse",
+  "repository": "https://github.com/demetriusk/ciguse",
+  "license": "MIT"
+}
