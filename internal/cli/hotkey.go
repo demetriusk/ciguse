@@ -30,13 +30,20 @@ func hotkeyGuide(goos, bin string) string {
 	cmd := accent.Render(bin + " use --notify")
 	switch goos {
 	case "darwin":
+		// Shortcuts lets the app in front see the key as well, so a ⌃ key reaches a
+		// terminal as a control key: ⌃C stops Claude Code. Raycast catches the key first.
 		return prefix + " a global key on macOS\n\n" +
-			"  1  Open Shortcuts and make a new shortcut with one action: Run Shell Script\n" +
-			"  2  Paste this as the script:\n" +
-			"       " + cmd + "\n" +
-			"  3  In the shortcut's details, Add Keyboard Shortcut, e.g. ⌃⌥C\n" +
-			"  4  If Shortcuts asks, allow running scripts in Settings › Advanced\n\n" +
-			"  " + muted.Render("with skhd instead:") + "  ctrl + alt - c : " + bin + " use --notify\n"
+			"  Raycast catches the key before the app in front sees it:\n" +
+			"  1  Save this as ~/.config/raycast/scripts/ciguse-log.sh and chmod +x it:\n" +
+			"       " + muted.Render("#!/bin/bash") + "\n" +
+			"       " + muted.Render("# @raycast.schemaVersion 1") + "\n" +
+			"       " + muted.Render("# @raycast.title Log a use") + "\n" +
+			"       " + muted.Render("# @raycast.mode silent") + "\n" +
+			"       " + cmd + " >/dev/null\n" +
+			"  2  Raycast Settings › Script Commands › Add Script Directory, pick that folder\n" +
+			"  3  Search Log a use in Raycast, ⌘K › Configure Command › Record Hotkey, ⌥⇧⌘L\n\n" +
+			"  " + muted.Render("Shortcuts instead:") + " a Run Shell Script action with the same command, then\n" +
+			"  Add Keyboard Shortcut. The app in front sees that key too, so avoid ⌃ keys.\n"
 	case "windows":
 		return prefix + " a global key on Windows\n\n" +
 			"  1  Open PowerToys › Keyboard Manager › Remap a shortcut\n" +
