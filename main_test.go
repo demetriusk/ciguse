@@ -69,6 +69,17 @@ func TestHookLatency(t *testing.T) {
 	if p95 := measure(t, "cig check on another prompt (sync)", hook("cig")); p95 > 30*time.Millisecond {
 		t.Errorf("cig check p95 %v, budget 30ms", p95)
 	}
+	statusline := func() {
+		cmd := exec.Command(bin, "statusline")
+		cmd.Env = append(os.Environ(), "CIGUSE_HOME="+home)
+		cmd.Stdin = strings.NewReader(`{"session_id":"bench"}`)
+		if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "today") {
+			t.Fatalf("statusline: %v, output %q", err, out)
+		}
+	}
+	if p95 := measure(t, "status line (sync, reads the database)", statusline); p95 > 30*time.Millisecond {
+		t.Errorf("status line p95 %v, budget 30ms", p95)
+	}
 	if log, err := os.ReadFile(filepath.Join(home, "hook.log")); err == nil {
 		t.Errorf("hook logged errors:\n%s", log)
 	}

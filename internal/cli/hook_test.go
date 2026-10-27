@@ -114,6 +114,13 @@ func TestHookPrivacy(t *testing.T) {
 	if err != nil || len(log) == 0 {
 		t.Fatalf("expected logged errors from the bad inputs: %v", err)
 	}
+	var export bytes.Buffer
+	for _, args := range [][]string{{"export"}, {"export", "--csv"}} {
+		Run(args, "test", &export, &export)
+	}
+	if bytes.Contains(export.Bytes(), []byte(marker)) {
+		t.Errorf("an export contains hook input")
+	}
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)

@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,7 +30,13 @@ const tagline = "nicotine use alongside your coding agent"
 const commands = `  ciguse init             set up: what you use, pack price, day end
   ciguse use [product]    log one use  (--ago 5m, --force)
   ciguse undo             remove the last use from the past 24h
-  ciguse report           uses per day  (--days 14)
+  ciguse report           working vs waiting, uses per day  (--days 14)
+  ciguse hotkey           set up a global key that logs a use
+  ciguse setup claude     plugin, and today's count in the status line
+  ciguse project alias    rename this folder's project in reports
+  ciguse export           every use as JSON lines  (--csv)
+  ciguse doctor           check the setup, show plugin errors
+  ciguse purge            delete all data
   ciguse version
 
 products: cigarette, iqos, glo, stick, pouch
@@ -42,6 +49,10 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 	// Hooks print nothing, or JSON for Claude Code, so they skip terminal detection entirely.
 	if len(args) > 0 && args[0] == "hook" {
 		return runHook(args[1:], stdout)
+	}
+	// The status line runs inside Claude Code, which renders colors from a pipe.
+	if len(args) > 0 && args[0] == "statusline" {
+		return runStatusline(args[1:], stdout, stderr)
 	}
 	if f, ok := stdout.(*os.File); ok {
 		lipgloss.EnableLegacyWindowsANSI(f)
@@ -63,6 +74,18 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 		return runReport(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
+	case "hotkey":
+		return runHotkey(args[1:], stdout, stderr)
+	case "setup":
+		return runSetup(args[1:], stdout, stderr)
+	case "project":
+		return runProject(args[1:], stdout, stderr)
+	case "export":
+		return runExport(args[1:], stdout, stderr)
+	case "doctor":
+		return runDoctor(args[1:], version, stdout, stderr)
+	case "purge":
+		return runPurge(args[1:], stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "ciguse", version)
 		return 0
@@ -71,11 +94,13 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 	return 2
 }
 
-// runUse logs one use. source records where it came from: cli, or prompt for cig.
+// runUse logs one use. source records where it came from: cli, hotkey (--notify), or
+// prompt for cig.
 func runUse(args []string, source string, stdout, stderr io.Writer) int {
 	fs := newFlags("use", stderr)
 	ago := fs.Duration("ago", 0, "how long ago it happened, e.g. 5m (max 12h)")
 	force := fs.Bool("force", false, "log even if a use was logged in the last 90s")
+	notifyFlag := fs.Bool("notify", false, "also show the result as a notification, for a global hotkey")
 	pos, ok := parse(fs, args, 1)
 	if !ok {
 		return 2
@@ -83,6 +108,22 @@ func runUse(args []string, source string, stdout, stderr io.Writer) int {
 	if *ago < 0 || *ago > 12*time.Hour {
 		fmt.Fprintln(stderr, "ciguse: --ago must be between 0 and 12h")
 		return 2
+	}
+	// A hotkey runs with no terminal in sight, so whatever is printed also becomes a
+	// notification, once the database is closed.
+	if *notifyFlag {
+		source = "hotkey"
+		var note bytes.Buffer
+		plain := colorprofile.NewWriter(&note, nil)
+		errOut := stderr
+		stdout, stderr = io.MultiWriter(stdout, plain), io.MultiWriter(stderr, plain)
+		defer func() {
+			text := strings.TrimSpace(note.String())
+			text = strings.TrimPrefix(strings.TrimPrefix(text, "ciguse · "), "ciguse: ")
+			if err := notify(text); err != nil {
+				fmt.Fprintf(errOut, "ciguse: couldn't show a notification: %v\n", err)
+			}
+		}()
 	}
 	s, code := openStore(stderr)
 	if s == nil {
@@ -154,6 +195,16 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	fmt.Fprintf(stdout, "%s last %d days · %d uses · %.1f a day\n\n", prefix, *days, r.Uses, float64(r.Uses)/float64(r.Active))
+	st, err := s.Settings()
+	if err != nil {
+		return fail(stderr, err)
+	}
+	d := r.Days[0].Date
+	sp, err := s.Split(time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location()).Add(st.DayStart), now())
+	if err != nil {
+		return fail(stderr, err)
+	}
+	printSplit(stdout, sp)
 	for i, d := range r.Days {
 		line := fmt.Sprintf("%s  %3d", d.Date.Format("Mon 02 Jan"), d.Uses)
 		if d.Uses > 0 {
@@ -298,7 +349,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if asked {
 		fmt.Fprintf(stdout, "\n%s\n  %s       %s\n  %s     %s\n", bold.Render("next"),
 			muted.Render("log a use"), accent.Render("ciguse use"),
-			muted.Render("Claude Code"), accent.Render("/plugin install ciguse --marketplace demetriusk/ciguse"))
+			muted.Render("Claude Code"), accent.Render("ciguse setup claude"))
 	}
 	return 0
 }

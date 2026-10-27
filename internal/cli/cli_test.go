@@ -64,6 +64,8 @@ func TestInitAndReport(t *testing.T) {
 	expect(t, []string{"use", "cigarette", "--ago", "3h"}, 0, "ciguse · cigarette logged 09:41 · 2 today\n")
 	expect(t, []string{"report", "--days", "3"}, 0,
 		"ciguse · last 3 days · 2 uses · 2.0 a day\n\n"+
+			"no Claude Code sessions in this range, so no working vs waiting split.\n"+
+			"the plugin records them: /plugin install ciguse --marketplace demetriusk/ciguse\n\n"+
 			"Sun 25 Oct    0\n"+
 			"Mon 26 Oct    0\n"+
 			"Tue 27 Oct    2  ██  today\n\n"+
