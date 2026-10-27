@@ -26,7 +26,7 @@ Log nicotine use from the terminal and find out whether you use more while your 
    ciguse setup claude
    ```
 
-   For Codex, this installs the plugin. Next time you start Codex it asks about the new hooks: pick **Trust all and continue**, since Codex skips hooks until you trust them.
+   For Codex, this installs the plugin. Next time you start Codex it asks about the new hooks: pick **Trust all and continue**, since Codex skips hooks until you trust them. It asks again after each plugin update.
 
    ```sh
    ciguse setup codex
@@ -36,6 +36,8 @@ Log nicotine use from the terminal and find out whether you use more while your 
    - type `cig` in Claude Code or Codex
    - press a global key: run `ciguse hotkey` once to set one up
    - run `ciguse use` in any terminal
+
+   <img src="docs/claude-code.gif" alt="Typing cig in Claude Code: the prompt is blocked, ciguse logs the use, and the status line goes from 3 to 4 today" width="49%"> <img src="docs/codex.gif" alt="Typing cig in Codex: the ciguse hook blocks the prompt and logs the use" width="49%">
 
 After a week or two, run `ciguse report` to see working vs waiting.
 
