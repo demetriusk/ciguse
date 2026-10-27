@@ -59,7 +59,7 @@ func TestInitAndReport(t *testing.T) {
 			"  default     iqos\n"+
 			"  price       iqos 6.00 EUR / 20\n"+
 			"  day starts  04:00\n"+
-			"  data        "+filepath.Join(dir, "ciguse.db")+"\n")
+			"  data        "+tildePath(filepath.Join(dir, "ciguse.db"))+"\n")
 	expect(t, []string{"use"}, 0, "ciguse · iqos logged 12:41 · 1 today\n")
 	expect(t, []string{"use", "cigarette", "--ago", "3h"}, 0, "ciguse · cigarette logged 09:41 · 2 today\n")
 	expect(t, []string{"report", "--days", "3"}, 0,
@@ -88,5 +88,18 @@ func TestParseMoney(t *testing.T) {
 		if _, err := parseMoney(in); err == nil {
 			t.Errorf("parseMoney(%q) should fail", in)
 		}
+	}
+}
+
+func TestTildePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
+	if got, want := tildePath(filepath.Join(home, "Library", "ciguse.db")), filepath.Join("~", "Library", "ciguse.db"); got != want {
+		t.Fatalf("under home: %q, want %q", got, want)
+	}
+	other := filepath.Join(filepath.Dir(home), "elsewhere", "ciguse.db")
+	if got := tildePath(other); got != other {
+		t.Fatalf("outside home: %q", got)
 	}
 }

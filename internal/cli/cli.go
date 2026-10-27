@@ -15,27 +15,43 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/demetriusk/ciguse/internal/store"
 )
 
 // now is replaced in tests.
 var now = time.Now
 
-const usage = `ciguse: nicotine use alongside your coding agent
+const tagline = "nicotine use alongside your coding agent"
 
-  ciguse use [product] [--ago 5m] [--force]  log one use
-  ciguse undo                                remove the last use logged in the past 24h
-  ciguse report [--days 14]                  uses per day
-  ciguse init [flags]                        default product, pack price, day start
+const commands = `  ciguse init             set up: what you smoke, pack price, day end
+  ciguse use [product]    log one use  (--ago 5m, --force)
+  ciguse undo             remove the last use from the past 24h
+  ciguse report           uses per day  (--days 14)
   ciguse version
 
 products: cigarette, iqos, glo, stick
 `
 
+const usage = "ciguse: " + tagline + "\n\n" + commands
+
 // Run executes ciguse with args (program name excluded) and returns the exit code.
 func Run(args []string, version string, stdout, stderr io.Writer) int {
+	// Hooks print nothing, so they skip terminal detection entirely.
+	if len(args) > 0 && args[0] == "hook" {
+		return runHook(args[1:])
+	}
+	if f, ok := stdout.(*os.File); ok {
+		lipgloss.EnableLegacyWindowsANSI(f)
+	}
+	// Strips color when the output isn't a terminal or NO_COLOR is set.
+	stdout = colorprofile.NewWriter(stdout, os.Environ())
+	stderr = colorprofile.NewWriter(stderr, os.Environ())
+
 	if len(args) == 0 || slices.Contains([]string{"help", "-h", "--help"}, args[0]) {
-		fmt.Fprint(stdout, usage)
+		fmt.Fprint(stdout, mark()+"\n  "+muted.Render(tagline)+"\n\n"+commands)
 		return 0
 	}
 	switch args[0] {
@@ -47,8 +63,6 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 		return runReport(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
-	case "hook":
-		return runHook(args[1:])
 	case "version", "--version":
 		fmt.Fprintln(stdout, "ciguse", version)
 		return 0
@@ -85,10 +99,10 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	if l.Duplicate {
-		fmt.Fprintf(stdout, "ciguse · already logged one at %s, skipped (--force logs anyway)\n", l.Previous.Format("15:04"))
+		fmt.Fprintf(stdout, "%s already logged one at %s, skipped %s\n", prefix, l.Previous.Format("15:04"), muted.Render("(--force logs anyway)"))
 		return 0
 	}
-	fmt.Fprintf(stdout, "ciguse · %s logged %s · %d today\n", l.Product, l.At.Format("15:04"), l.Today)
+	fmt.Fprintf(stdout, "%s %s logged %s · %s\n", prefix, bold.Render(l.Product), l.At.Format("15:04"), bold.Render(fmt.Sprintf("%d today", l.Today)))
 	return 0
 }
 
@@ -107,10 +121,10 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	if !u.OK {
-		fmt.Fprintln(stdout, "ciguse · nothing logged in the past 24h to undo")
+		fmt.Fprintln(stdout, prefix, "nothing logged in the past 24h to undo")
 		return 0
 	}
-	fmt.Fprintf(stdout, "ciguse · removed %s %s · %d today\n", u.Product, u.At.Format("15:04"), u.Today)
+	fmt.Fprintf(stdout, "%s removed %s %s · %s\n", prefix, u.Product, u.At.Format("15:04"), bold.Render(fmt.Sprintf("%d today", u.Today)))
 	return 0
 }
 
@@ -135,16 +149,22 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	if r.Active == 0 {
-		fmt.Fprintln(stdout, "ciguse · nothing logged yet. Log a use with: ciguse use")
+		fmt.Fprintln(stdout, prefix, "nothing logged yet. Log a use with: ciguse use")
 		return 0
 	}
-	fmt.Fprintf(stdout, "ciguse · last %d days · %d uses · %.1f a day\n\n", *days, r.Uses, float64(r.Uses)/float64(r.Active))
+	fmt.Fprintf(stdout, "%s last %d days · %d uses · %.1f a day\n\n", prefix, *days, r.Uses, float64(r.Uses)/float64(r.Active))
 	for i, d := range r.Days {
-		line := fmt.Sprintf("%s  %3d  %s", d.Date.Format("Mon 02 Jan"), d.Uses, strings.Repeat("█", min(d.Uses, 40)))
-		if i == len(r.Days)-1 {
-			line += "  today"
+		line := fmt.Sprintf("%s  %3d", d.Date.Format("Mon 02 Jan"), d.Uses)
+		if d.Uses > 0 {
+			line += "  " + accent.Render(strings.Repeat("█", min(d.Uses, 40)))
 		}
-		fmt.Fprintln(stdout, strings.TrimRight(line, " "))
+		if i == len(r.Days)-1 {
+			if d.Uses == 0 {
+				line += "  "
+			}
+			line += "  " + accent.Render("today")
+		}
+		fmt.Fprintln(stdout, line)
 	}
 	currencies := make([]string, 0, len(r.Value))
 	for c := range r.Value {
@@ -155,9 +175,9 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		if i == 0 {
 			fmt.Fprintln(stdout)
 		}
-		fmt.Fprintf(stdout, "value  %s %s", r.Value[c].FloatString(2), c)
+		fmt.Fprintf(stdout, "%s  %s %s", muted.Render("value"), r.Value[c].FloatString(2), c)
 		if i == len(currencies)-1 && r.Priced < r.Uses {
-			fmt.Fprintf(stdout, "  (%d of %d uses priced)", r.Priced, r.Uses)
+			fmt.Fprint(stdout, muted.Render(fmt.Sprintf("  (%d of %d uses priced)", r.Priced, r.Uses)))
 		}
 		fmt.Fprintln(stdout)
 	}
@@ -173,6 +193,24 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	dayStart := fs.String("day-start", "", "local time a new day starts, e.g. 04:00")
 	if _, ok := parse(fs, args, 0); !ok {
 		return 2
+	}
+	// No flags in a terminal: ask instead, filling the same variables.
+	asked := fs.NFlag() == 0 && canAsk()
+	if asked {
+		s, code := openStore(stderr)
+		if s == nil {
+			return code
+		}
+		fmt.Fprintln(stdout, mark())
+		err := askSetup(s, stdout, product, price, currency, size, dayStart)
+		s.Close()
+		if errors.Is(err, errSetupCancelled) {
+			fmt.Fprintln(stdout, prefix, "setup cancelled, nothing saved")
+			return 1
+		}
+		if err != nil {
+			return fail(stderr, err)
+		}
 	}
 	var priceMinor int64
 	var dayStartDur time.Duration
@@ -236,14 +274,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
-	fmt.Fprintln(stdout, "ciguse · ready")
-	fmt.Fprintf(stdout, "  default     %s\n", st.DefaultProduct)
+	fmt.Fprintln(stdout, prefix, "ready")
+	fmt.Fprintf(stdout, "  %s     %s\n", muted.Render("default"), bold.Render(st.DefaultProduct))
 	priced := false
 	for _, p := range products {
 		if !p.PackPriceMinor.Valid {
 			continue
 		}
-		label := "  price       "
+		label := "  " + muted.Render("price") + "       "
 		if priced {
 			label = "              "
 		}
@@ -251,11 +289,16 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s%s %s %s / %d\n", label, p.ID, formatMinor(p.PackPriceMinor.Int64), p.Currency.String, p.PackSize.Int64)
 	}
 	if !priced {
-		fmt.Fprintln(stdout, "  price       not set (optional: --pack-price 5.00 --currency EUR)")
+		fmt.Fprintf(stdout, "  %s       not set %s\n", muted.Render("price"), muted.Render("(optional: --pack-price 5.00 --currency EUR)"))
 	}
-	fmt.Fprintf(stdout, "  day starts  %02d:%02d\n", int(st.DayStart.Hours()), int(st.DayStart.Minutes())%60)
+	fmt.Fprintf(stdout, "  %s  %02d:%02d\n", muted.Render("day starts"), int(st.DayStart.Hours()), int(st.DayStart.Minutes())%60)
 	dir, _ := dataDir()
-	fmt.Fprintf(stdout, "  data        %s\n", filepath.Join(dir, "ciguse.db"))
+	fmt.Fprintf(stdout, "  %s        %s\n", muted.Render("data"), muted.Render(tildePath(filepath.Join(dir, "ciguse.db"))))
+	if asked {
+		fmt.Fprintf(stdout, "\n%s\n  %s       %s\n  %s     %s\n", bold.Render("next"),
+			muted.Render("log a use"), accent.Render("ciguse use"),
+			muted.Render("Claude Code"), accent.Render("/plugin install ciguse --marketplace demetriusk/ciguse"))
+	}
 	return 0
 }
 
@@ -324,6 +367,18 @@ func dataDir() (string, error) {
 	}
 	d, err := os.UserHomeDir()
 	return filepath.Join(d, ".local", "share", "ciguse"), err
+}
+
+// tildePath shows a path under the home directory as ~/..., the way people type it.
+func tildePath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	if rel, err := filepath.Rel(home, p); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		return filepath.Join("~", rel)
+	}
+	return p
 }
 
 func fail(stderr io.Writer, err error) int {

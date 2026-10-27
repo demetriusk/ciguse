@@ -31,6 +31,7 @@ irm https://raw.githubusercontent.com/demetriusk/ciguse/main/install.ps1 | iex
 ## Use
 
 ```sh
+ciguse init              # set up: asks what you smoke, pack price, when your day ends
 ciguse use               # log one use of your default product
 ciguse use iqos          # cigarette, iqos, glo, stick
 ciguse use --ago 10m     # forgot to log it
@@ -38,12 +39,14 @@ ciguse undo              # remove the last log from the past 24h
 ciguse report            # last 14 days
 ```
 
-Optional setup:
+`ciguse init` takes flags too, for scripts:
 
 ```sh
 ciguse init --product iqos --pack-price 6.00 --currency EUR --pack-size 20
 ciguse init --day-start 04:00   # late nights count toward the previous day
 ```
+
+Colors follow your terminal's theme and switch off with `NO_COLOR` or when output isn't a terminal.
 
 A second log within 90 seconds is treated as an accidental repeat and skipped; `--force` logs it anyway.
 

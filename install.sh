@@ -46,7 +46,9 @@ mkdir -p "$dir"
 mv "$tmp/ciguse" "$dir/ciguse"
 chmod 755 "$dir/ciguse"
 
-echo "ciguse installed to $dir/ciguse ($("$dir/ciguse" version))"
+shown="$dir/ciguse"
+case "$shown" in "$HOME"/*) shown="~${shown#"$HOME"}" ;; esac
+echo "ciguse installed to $shown ($("$dir/ciguse" version))"
 case ":$PATH:" in
   *":$dir:"*) ;;
   *) echo "Add it to your PATH:  export PATH=\"$dir:\$PATH\"" ;;
