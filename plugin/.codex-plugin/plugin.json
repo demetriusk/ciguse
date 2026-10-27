@@ -1,0 +1,107 @@
+{
+  "name": "ciguse",
+  "version": "0.7.0",
+  "description": "Records when Codex is working and when it's waiting on you, so ciguse can compare your nicotine use across the two. Type cig to log a use. Needs the ciguse binary on your PATH.",
+  "author": {
+    "name": "demetriusk"
+  },
+  "homepage": "https://github.com/demetriusk/ciguse",
+  "repository": "https://github.com/demetriusk/ciguse",
+  "license": "MIT",
+  "hooks": {
+    "hooks": {
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex SessionStart",
+              "timeout": 10,
+              "async": true
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex UserPromptSubmit",
+              "timeout": 10,
+              "async": true
+            }
+          ]
+        },
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex cig",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex PostToolUse",
+              "timeout": 10,
+              "async": true
+            }
+          ]
+        }
+      ],
+      "PermissionRequest": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex PermissionRequest",
+              "timeout": 10,
+              "async": true
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex Stop",
+              "timeout": 10,
+              "async": true
+            }
+          ]
+        }
+      ],
+      "Interrupt": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex Interrupt",
+              "timeout": 3,
+              "async": true
+            }
+          ]
+        }
+      ],
+      "SessionEnd": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ciguse hook codex SessionEnd",
+              "timeout": 5
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

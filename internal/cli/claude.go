@@ -159,16 +159,22 @@ var claudeCLI = func(args ...string) ([]byte, error) {
 	return exec.Command("claude", args...).CombinedOutput()
 }
 
-// runSetup handles `ciguse setup claude [--remove]`: the plugin, and ciguse in the status line.
+// runSetup handles `ciguse setup claude|codex [--remove]`. For Claude Code: the plugin, and
+// ciguse in the status line. For Codex: the plugin.
 func runSetup(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("setup", stderr)
-	remove := fs.Bool("remove", false, "take ciguse out of the status line, putting back what was there")
+	remove := fs.Bool("remove", false, "undo: the status line for claude, the plugin for codex")
 	pos, ok := parse(fs, args, 1)
 	if !ok {
 		return 2
 	}
-	if first(pos) != "claude" {
-		fmt.Fprintln(stderr, "ciguse: usage: ciguse setup claude [--remove]")
+	switch first(pos) {
+	case "codex":
+		setupCodex(*remove, stdout)
+		return 0
+	case "claude":
+	default:
+		fmt.Fprintln(stderr, "ciguse: usage: ciguse setup claude|codex [--remove]")
 		return 2
 	}
 	s, code := openStore(stderr)
@@ -255,6 +261,48 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		muted.Render("was"), before, muted.Render("now"), line["command"],
 		muted.Render("backup"), tildePath(backup), muted.Render("undo"), accent.Render("ciguse setup claude --remove"))
 	return 0
+}
+
+// codexCLI runs the codex command. Replaced in tests.
+var codexCLI = func(args ...string) ([]byte, error) {
+	if _, err := exec.LookPath("codex"); err != nil {
+		return nil, err
+	}
+	return exec.Command("codex", args...).CombinedOutput()
+}
+
+// setupCodex installs or removes the Codex plugin, served from the same marketplace as the
+// Claude Code one. Codex runs a plugin's hooks only once the user trusts them in /hooks.
+func setupCodex(remove bool, stdout io.Writer) {
+	if remove {
+		if _, err := codexCLI("plugin", "remove", "ciguse@ciguse"); err != nil {
+			fmt.Fprintf(stdout, "%s remove the Codex plugin with:\n  %s\n", prefix, accent.Render("codex plugin remove ciguse@ciguse"))
+			return
+		}
+		fmt.Fprintln(stdout, prefix, "Codex plugin removed")
+		return
+	}
+	list, err := codexCLI("plugin", "list")
+	listed, installed := false, false
+	for _, line := range strings.Split(string(list), "\n") {
+		if strings.Contains(line, "ciguse@ciguse") {
+			listed, installed = true, !strings.Contains(line, "not installed")
+		}
+	}
+	if err == nil && !listed {
+		_, err = codexCLI("plugin", "marketplace", "add", "demetriusk/ciguse")
+	}
+	if err == nil && !installed {
+		_, err = codexCLI("plugin", "add", "ciguse@ciguse")
+	}
+	if err != nil {
+		fmt.Fprintf(stdout, "%s install the Codex plugin with:\n  %s\n  %s\n", prefix,
+			accent.Render("codex plugin marketplace add demetriusk/ciguse"), accent.Render("codex plugin add ciguse@ciguse"))
+	} else {
+		fmt.Fprintln(stdout, prefix, "Codex plugin installed")
+	}
+	fmt.Fprintf(stdout, "  %s  in Codex, run %s and trust the ciguse hooks. Codex skips new hooks until you do\n",
+		muted.Render("then"), accent.Render("/hooks"))
 }
 
 // setupPlugin installs the plugin with the claude command, or says how to.

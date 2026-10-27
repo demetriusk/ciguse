@@ -167,3 +167,34 @@ func TestStatuslineSegment(t *testing.T) {
 	*clock = clock.Add(47 * 60e9)
 	expect(t, []string{"statusline", "--since", "--ratio"}, 0, "ciguse · 1 today · 47m since last\n")
 }
+
+func TestSetupCodex(t *testing.T) {
+	setup(t)
+	var calls []string
+	old := codexCLI
+	t.Cleanup(func() { codexCLI = old })
+	codexCLI = func(args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return []byte("PLUGIN  STATUS  VERSION  SOURCE\n"), nil
+	}
+	out, code := run(t, "setup", "codex")
+	if code != 0 || strings.Join(calls, "; ") != "plugin list; plugin marketplace add demetriusk/ciguse; plugin add ciguse@ciguse" {
+		t.Fatalf("exit %d, calls %q:\n%s", code, calls, out)
+	}
+	contains(t, out, "Codex plugin installed", "/hooks and trust the ciguse hooks")
+
+	// Already installed: nothing to do but the trust reminder.
+	calls = nil
+	codexCLI = func(args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return []byte("ciguse@ciguse  installed  0.7.0  /x\n"), nil
+	}
+	if out, _ := run(t, "setup", "codex"); len(calls) != 1 || !strings.Contains(out, "Codex plugin installed") || !strings.Contains(out, "/hooks") {
+		t.Fatalf("calls %q:\n%s", calls, out)
+	}
+
+	// No codex command: the steps to run by hand.
+	codexCLI = func(args ...string) ([]byte, error) { return nil, errors.New("not found") }
+	out, _ = run(t, "setup", "codex")
+	contains(t, out, "codex plugin marketplace add demetriusk/ciguse", "codex plugin add ciguse@ciguse")
+}

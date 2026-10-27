@@ -101,9 +101,12 @@ func TestHookPrivacy(t *testing.T) {
 		`{"prompt":"` + marker + `"}`,                                                 // missing fields
 	}
 	for _, in := range inputs {
-		for event := range hookEvents {
-			*clock = clock.Add(time.Second)
-			runHookInput(t, in, "claude", event)
+		for agent, events := range hookEvents {
+			for event := range events {
+				*clock = clock.Add(time.Second)
+				runHookInput(t, in, agent, event)
+			}
+			runHookInput(t, in, agent, "cig")
 		}
 	}
 
@@ -295,5 +298,41 @@ func TestCigHookFailsClosed(t *testing.T) {
 	}
 	if out := cigHookOutput(t, "not a cig"); out != "" {
 		t.Fatalf("a passing prompt was blocked: %s", out)
+	}
+}
+
+// Codex hooks record the same states, and Esc (Interrupt) ends a turn as waiting on you.
+func TestCodexHooks(t *testing.T) {
+	dir, clock := setup(t)
+	input := `{"session_id":"thr_1","cwd":` + quote(repo(t, t.TempDir(), "web-app")) + `,"hook_event_name":"x","model":"gpt"}`
+	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PostToolUse", "Interrupt", "UserPromptSubmit", "Stop", "SessionEnd"} {
+		*clock = clock.Add(time.Minute)
+		runHookInput(t, input, "codex", event)
+	}
+	got := strings.Join(queryDB(t, dir, `SELECT state || ' ' || cause FROM transitions ORDER BY ts, id`), ", ")
+	want := "working codex UserPromptSubmit, waiting_on_you codex Interrupt, working codex UserPromptSubmit, waiting_on_you codex Stop, ended codex SessionEnd"
+	if got != want {
+		t.Fatalf("transitions:\n got %s\nwant %s", got, want)
+	}
+	if got := queryDB(t, dir, `SELECT alias FROM projects`); len(got) != 1 || got[0] != "web-app" {
+		t.Fatalf("projects %q", got)
+	}
+}
+
+// Codex gets only the documented block fields; Claude Code's extra field could fail
+// validation and let the prompt through.
+func TestCodexCigBlock(t *testing.T) {
+	dir, _ := setup(t)
+	stdin = strings.NewReader(`{"session_id":"thr_1","cwd":` + quote(t.TempDir()) + `,"prompt":"cig pouch"}`)
+	t.Cleanup(func() { stdin = os.Stdin })
+	var out, errb bytes.Buffer
+	if code := Run([]string{"hook", "codex", "cig"}, "test", &out, &errb); code != 0 || errb.Len() > 0 {
+		t.Fatalf("exit %d, stderr %q", code, errb.String())
+	}
+	if want := `{"decision":"block","reason":"ciguse · pouch logged 12:41 · 1 today"}` + "\n"; out.String() != want {
+		t.Fatalf("\n got %s\nwant %s", out.String(), want)
+	}
+	if got := queryDB(t, dir, `SELECT source FROM events`); len(got) != 1 || got[0] != "prompt" {
+		t.Fatalf("events %q", got)
 	}
 }

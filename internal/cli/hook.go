@@ -56,27 +56,38 @@ func cigArgs(prompt string) ([]string, bool) {
 	return args, true
 }
 
-// hookEvents maps each Claude Code hook the plugin registers to what it records.
-var hookEvents = map[string]store.AgentEvent{
-	"SessionStart":      {},
-	"UserPromptSubmit":  {State: store.Working},
-	"PostToolUse":       {State: store.Working, OnlyOnChange: true}, // closes a permission wait
-	"PermissionRequest": {State: store.WaitingOnYou},
-	"Stop":              {State: store.WaitingOnYou},
-	"StopFailure":       {State: store.WaitingOnYou},
-	"SessionEnd":        {State: store.Ended},
+// hookEvents maps each agent's hooks, as its plugin registers them, to what they record.
+var hookEvents = map[string]map[string]store.AgentEvent{
+	"claude": {
+		"SessionStart":      {},
+		"UserPromptSubmit":  {State: store.Working},
+		"PostToolUse":       {State: store.Working, OnlyOnChange: true}, // closes a permission wait
+		"PermissionRequest": {State: store.WaitingOnYou},
+		"Stop":              {State: store.WaitingOnYou},
+		"StopFailure":       {State: store.WaitingOnYou},
+		"SessionEnd":        {State: store.Ended},
+	},
+	"codex": {
+		"SessionStart":      {},
+		"UserPromptSubmit":  {State: store.Working},
+		"PostToolUse":       {State: store.Working, OnlyOnChange: true},
+		"PermissionRequest": {State: store.WaitingOnYou},
+		"Stop":              {State: store.WaitingOnYou},
+		"Interrupt":         {State: store.WaitingOnYou}, // Esc ends the turn; Claude Code has no such hook
+		"SessionEnd":        {State: store.Ended},
+	},
 }
 
-// runHook handles `ciguse hook claude <Event>` and `ciguse hook claude cig`. It always
-// exits 0 and prints nothing but the cig block decision: a non-zero exit can block the
-// user's prompt, and stdout can end up in Claude's context. Failures go to hook.log in
-// the data directory instead.
+// runHook handles `ciguse hook <agent> <Event>` and `ciguse hook <agent> cig`, for claude
+// and codex. It always exits 0 and prints nothing but the cig block decision: a non-zero
+// exit can block the user's prompt, and stdout can end up in the agent's context. Failures
+// go to hook.log in the data directory instead.
 func runHook(args []string, stdout io.Writer) int {
 	at := now()
 	event := "hook"
 	if len(args) == 2 {
-		if _, ok := hookEvents[args[1]]; ok || args[1] == "cig" {
-			event = args[1]
+		if _, ok := hookEvents[args[0]][args[1]]; ok || (hookEvents[args[0]] != nil && args[1] == "cig") {
+			event = args[0] + " " + args[1]
 		}
 	}
 	// A recovered panic returns 0 too, where an unrecovered one would exit 2.
@@ -86,8 +97,8 @@ func runHook(args []string, stdout io.Writer) int {
 		}
 	}()
 	var err error
-	if event == "cig" && args[0] == "claude" {
-		err = cigHook(at, stdout)
+	if len(args) == 2 && event == args[0]+" cig" {
+		err = cigHook(args[0], at, stdout)
 	} else {
 		err = hook(args, at)
 	}
@@ -98,9 +109,9 @@ func runHook(args []string, stdout io.Writer) int {
 }
 
 // cigHook is the one sync hook, on UserPromptSubmit. A cig prompt is logged and blocked,
-// so it never reaches Claude and the user sees only the confirmation. Any other prompt
+// so it never reaches the agent and the user sees only the confirmation. Any other prompt
 // passes with no output, before anything is read from disk.
-func cigHook(at time.Time, stdout io.Writer) error {
+func cigHook(agent string, at time.Time, stdout io.Writer) error {
 	var in hookInput
 	if err := json.NewDecoder(stdin).Decode(&in); err != nil {
 		return errors.New("hook input is not valid JSON") // the decoder's own message can quote input
@@ -128,19 +139,21 @@ func cigHook(at time.Time, stdout io.Writer) error {
 		err = errors.New(strings.TrimSpace(errb.String()))
 		reason = "ciguse · couldn't save, run: ciguse " + strings.Join(args, " ")
 	}
-	json.NewEncoder(stdout).Encode(map[string]any{
-		"decision":           "block",
-		"reason":             reason,
-		"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "suppressOriginalPrompt": true},
-	})
+	block := map[string]any{"decision": "block", "reason": reason}
+	// Claude Code also keeps the prompt text out of the block message. Codex validates
+	// hook output, so it gets only the fields it documents.
+	if agent == "claude" {
+		block["hookSpecificOutput"] = map[string]any{"hookEventName": "UserPromptSubmit", "suppressOriginalPrompt": true}
+	}
+	json.NewEncoder(stdout).Encode(block)
 	return err
 }
 
 func hook(args []string, at time.Time) error {
-	if len(args) != 2 || args[0] != "claude" {
-		return errors.New("usage: ciguse hook claude <Event>")
+	if len(args) != 2 || hookEvents[args[0]] == nil {
+		return errors.New("usage: ciguse hook claude|codex <Event>")
 	}
-	e, ok := hookEvents[args[1]]
+	e, ok := hookEvents[args[0]][args[1]]
 	if !ok {
 		return errors.New("unknown hook event")
 	}
@@ -173,6 +186,9 @@ func hook(args []string, at time.Time) error {
 	e.Alias = filepath.Base(root)
 	e.At = at
 	e.Cause = args[1]
+	if args[0] != "claude" {
+		e.Cause = args[0] + " " + args[1] // so doctor can tell the agents apart
+	}
 
 	// Every recording hook runs async, so nothing the user waits on sits behind this lock wait.
 	s, err := store.Open(filepath.Join(dir, "ciguse.db"), 2*time.Second)

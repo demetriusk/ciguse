@@ -1,6 +1,6 @@
 # ciguse
 
-Log nicotine use from the terminal and find out whether you use more while your coding agent works or while it waits on you. Local only: no account, no network, no telemetry.
+Log nicotine use from the terminal and find out whether you use more while your coding agent works or while it waits on you. Works with Claude Code and Codex. Local only: no account, no network, no telemetry.
 
 ![Setting up ciguse, logging a use, a two-week report on sample data, and the Claude Code status line](docs/demo.gif)
 
@@ -20,14 +20,20 @@ Log nicotine use from the terminal and find out whether you use more while your 
    ciguse init
    ```
 
-3. **Connect Claude Code.** This installs the plugin and puts today's count in Claude Code's status line.
+3. **Connect your agent.** For Claude Code, this installs the plugin and puts today's count in its status line:
 
    ```sh
    ciguse setup claude
    ```
 
+   For Codex, this installs the plugin. Then run `/hooks` in Codex and trust the ciguse hooks, since Codex skips new hooks until you do:
+
+   ```sh
+   ciguse setup codex
+   ```
+
 4. **Log each use**, whichever way is closest:
-   - type `cig` in Claude Code
+   - type `cig` in Claude Code or Codex
    - press a global key: run `ciguse hotkey` once to set one up
    - run `ciguse use` in any terminal
 
@@ -48,9 +54,9 @@ Run `ciguse` for everything else: `export --csv`, `project alias`, `purge`, `set
 
 ## Good to know
 
-- **`cig` only works while Claude Code waits on you.** While it's working, your message waits in a queue and skips the plugin, so use the hotkey or a terminal then.
+- **`cig` only works while the agent waits on you.** While Claude Code is working, your message waits in a queue and skips the plugin, so use the hotkey or a terminal then.
 - **Two logs within 90 seconds count as one,** in case of a double press. To log a second one, add `--force` (`cig --force` in Claude Code).
-- **With several sessions open,** time counts as waiting whenever any of them waits on you, and as working only while all of them work. A wait longer than 30 minutes counts as away.
+- **With several sessions open,** in Claude Code, Codex or both, time counts as waiting whenever any of them waits on you, and as working only while all of them work. A wait longer than 30 minutes counts as away.
 - **The ratio needs data:** at least 10 uses while working and 10 while waiting. Until about 95 each, the report marks it early.
 - **Your status line is safe.** `ciguse setup claude` changes only `statusLine` in `~/.claude/settings.json` and keeps a backup. If you had a status line, it keeps running, with the ciguse count after it. `ciguse setup claude --remove` puts it back.
 - **After your first week** you can add `--since` (time since your last use) or `--ratio` to the `ciguse statusline` command in that file.
@@ -79,11 +85,13 @@ irm https://raw.githubusercontent.com/demetriusk/ciguse/main/install.ps1 | iex
 /plugin install ciguse --marketplace demetriusk/ciguse
 ```
 
+**Codex plugin by hand:** `codex plugin marketplace add demetriusk/ciguse`, then `codex plugin add ciguse@ciguse`, then `/hooks` in Codex to trust the hooks.
+
 **For scripts,** `ciguse init` takes flags instead of asking: `ciguse init --product iqos --pack-price 6.00 --currency EUR --pack-size 20 --day-start 04:00`.
 
 ## Privacy and data
 
-The plugin stores, per Claude Code session: a keyed session id, a keyed project path, the repository's folder name, and when the state changed. Prompts, tool input, file paths and transcripts are never stored. A `cig` prompt is checked in memory and dropped.
+The plugins store, per agent session: a keyed session id, a keyed project path, the repository's folder name, and when the state changed. Prompts, tool input, file paths and transcripts are never stored. A `cig` prompt is checked in memory and dropped.
 
 Everything lives in one folder, readable only by your user:
 
