@@ -121,13 +121,24 @@ func (s *Store) setup(busy time.Duration) error {
 			return fmt.Errorf("enable WAL: %w", err)
 		}
 	}
+	// Most opens find the schema current, so check with a plain read first: on Windows a
+	// committed write costs two disk flushes, which a status line refresh can't afford.
+	var v int
+	if err := s.db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+		return err
+	}
+	if v == len(migrations) {
+		return nil
+	}
 	return s.immediate(func(ctx context.Context, c *sql.Conn) error {
-		var v int
 		if err := c.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil {
 			return err
 		}
 		if v > len(migrations) {
 			return fmt.Errorf("database was written by a newer ciguse (schema %d), update ciguse", v)
+		}
+		if v == len(migrations) {
+			return nil // another process migrated while this one waited for the lock
 		}
 		for i := v; i < len(migrations); i++ {
 			if _, err := c.ExecContext(ctx, migrations[i]); err != nil {
