@@ -121,20 +121,6 @@ func (s *Store) setup(busy time.Duration) error {
 			return fmt.Errorf("enable WAL: %w", err)
 		}
 	}
-	// Keep the -wal and -shm files when this process is the last to close. Otherwise every
-	// short-lived process creates and deletes both, which on Windows costs more than the read.
-	c, err := s.db.Conn(context.Background())
-	if err != nil {
-		return err
-	}
-	err = c.Raw(func(dc any) error {
-		_, err := dc.(sqlite.FileControl).FileControlPersistWAL("main", 1)
-		return err
-	})
-	c.Close()
-	if err != nil {
-		return fmt.Errorf("persist WAL: %w", err)
-	}
 	// Most opens find the schema current, so check with a plain read first: on Windows a
 	// committed write costs two disk flushes, which a status line refresh can't afford.
 	var v int

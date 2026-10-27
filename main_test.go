@@ -16,7 +16,9 @@ import (
 
 // TestHookLatency runs the built binary the way Claude Code does and logs where the time goes.
 // The recording hooks all run async, so only the sync cig check holds the user's prompt: it
-// must stay under the 30 ms budget (spec section 6) for a prompt that isn't cig.
+// must stay under the 30 ms budget (spec section 6) for a prompt that isn't cig. The status
+// line holds nothing up, since Claude Code runs it after a 300 ms debounce and cancels stale
+// runs, so it gets 100 ms: on Windows, opening a WAL database alone takes about 25 ms.
 // It only runs with CIGUSE_LATENCY=1, on its own: alongside other packages' tests the
 // machine is busy and the numbers mean nothing.
 func TestHookLatency(t *testing.T) {
@@ -77,8 +79,8 @@ func TestHookLatency(t *testing.T) {
 			t.Fatalf("statusline: %v, output %q", err, out)
 		}
 	}
-	if p95 := measure(t, "status line (sync, reads the database)", statusline); p95 > 30*time.Millisecond {
-		t.Errorf("status line p95 %v, budget 30ms", p95)
+	if p95 := measure(t, "status line (reads the database)", statusline); p95 > 100*time.Millisecond {
+		t.Errorf("status line p95 %v, budget 100ms", p95)
 	}
 	if log, err := os.ReadFile(filepath.Join(home, "hook.log")); err == nil {
 		t.Errorf("hook logged errors:\n%s", log)
