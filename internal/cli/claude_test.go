@@ -181,7 +181,7 @@ func TestSetupCodex(t *testing.T) {
 	if code != 0 || strings.Join(calls, "; ") != "plugin list; plugin marketplace add demetriusk/ciguse; plugin add ciguse@ciguse" {
 		t.Fatalf("exit %d, calls %q:\n%s", code, calls, out)
 	}
-	contains(t, out, "Codex plugin installed", "/hooks and trust the ciguse hooks")
+	contains(t, out, "Codex plugin installed", "pick Trust all when it asks about new hooks")
 
 	// Already installed: nothing to do but the trust reminder.
 	calls = nil

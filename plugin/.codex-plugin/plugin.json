@@ -97,7 +97,7 @@
             {
               "type": "command",
               "command": "ciguse hook codex SessionEnd",
-              "timeout": 5
+              "timeout": 3
             }
           ]
         }

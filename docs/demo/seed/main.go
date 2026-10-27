@@ -40,11 +40,11 @@ func main() {
 			}
 		}
 	}
-	agent := func(session, project string, at time.Time, state string) {
+	agent := func(session, name string, at time.Time, state string) {
 		if at.After(now) {
 			return
 		}
-		err := s.RecordAgent(store.AgentEvent{Session: session, Project: project, Alias: project, At: at, State: state, Cause: "seed"})
+		err := s.RecordAgent(store.AgentEvent{Session: session, Agent: name, Project: "api-server", Alias: "api-server", At: at, State: state, Cause: "seed"})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -55,18 +55,18 @@ func main() {
 		t := time.Date(y, m, d+day, 9, 0, 0, 0, time.Local).Add(mins(0, 40))
 		end := t.Add(9 * time.Hour)
 		for i := 0; t.Before(end) && t.Before(now); i++ {
-			session, project := fmt.Sprintf("demo-%d-%d", day, i), []string{"api-server", "web-app"}[r.IntN(2)]
+			session, name := fmt.Sprintf("demo-%d-%d", day, i), []string{"claude", "claude", "codex"}[r.IntN(3)]
 			stop := t.Add(mins(40, 100))
 			for t.Before(stop) {
 				work, wait := mins(4, 16), mins(1, 9)
-				agent(session, project, t, store.Working)
+				agent(session, name, t, store.Working)
 				uses(t, t.Add(work), 0.9)
 				t = t.Add(work)
-				agent(session, project, t, store.WaitingOnYou)
+				agent(session, name, t, store.WaitingOnYou)
 				uses(t, t.Add(wait), 1.8)
 				t = t.Add(wait)
 			}
-			agent(session, project, t, store.Ended)
+			agent(session, name, t, store.Ended)
 			gap := mins(10, 40)
 			uses(t, t.Add(gap), 0.8)
 			t = t.Add(gap)

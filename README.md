@@ -26,7 +26,7 @@ Log nicotine use from the terminal and find out whether you use more while your 
    ciguse setup claude
    ```
 
-   For Codex, this installs the plugin. Then run `/hooks` in Codex and trust the ciguse hooks, since Codex skips new hooks until you do:
+   For Codex, this installs the plugin. Next time you start Codex it asks about the new hooks: pick **Trust all and continue**, since Codex skips hooks until you trust them.
 
    ```sh
    ciguse setup codex
@@ -47,15 +47,17 @@ After a week or two, run `ciguse report` to see working vs waiting.
 | `ciguse use pouch` | log another product: `cigarette`, `iqos`, `glo`, `stick`, `pouch` |
 | `ciguse use --ago 10m` | log one you forgot |
 | `ciguse undo` | remove your last log from the past 24 hours |
-| `ciguse report` | the last 14 days: working vs waiting, then uses per day |
+| `ciguse report` | the last 14 days: working vs waiting, by agent, then uses per day |
 | `ciguse doctor` | something looks off? start here |
 
 Run `ciguse` for everything else: `export --csv`, `project alias`, `purge`, `setup claude --remove`.
 
 ## Good to know
 
-- **`cig` only works while the agent waits on you.** While Claude Code is working, your message waits in a queue and skips the plugin, so use the hotkey or a terminal then.
+- **In Claude Code, `cig` only works while it waits on you.** While it's working, your message waits in a queue and skips the plugin, so use the hotkey or a terminal then.
+- **In Codex, `cig` works mid-turn too.** It's logged when Codex reaches its next step, the confirmation shows as a hook note, and Codex carries on with its work.
 - **Two logs within 90 seconds count as one,** in case of a double press. To log a second one, add `--force` (`cig --force` in Claude Code).
+- **One report for both agents.** Uses in Claude Code and Codex count together, then a by-agent breakdown shows each one's share. Uses logged outside any agent session show there as *no agent / away*.
 - **With several sessions open,** in Claude Code, Codex or both, time counts as waiting whenever any of them waits on you, and as working only while all of them work. A wait longer than 30 minutes counts as away.
 - **The ratio needs data:** at least 10 uses while working and 10 while waiting. Until about 95 each, the report marks it early.
 - **Your status line is safe.** `ciguse setup claude` changes only `statusLine` in `~/.claude/settings.json` and keeps a backup. If you had a status line, it keeps running, with the ciguse count after it. `ciguse setup claude --remove` puts it back.
@@ -85,7 +87,7 @@ irm https://raw.githubusercontent.com/demetriusk/ciguse/main/install.ps1 | iex
 /plugin install ciguse --marketplace demetriusk/ciguse
 ```
 
-**Codex plugin by hand:** `codex plugin marketplace add demetriusk/ciguse`, then `codex plugin add ciguse@ciguse`, then `/hooks` in Codex to trust the hooks.
+**Codex plugin by hand:** `codex plugin marketplace add demetriusk/ciguse`, then `codex plugin add ciguse@ciguse`, then trust the hooks when Codex asks (or in `/hooks`).
 
 **For scripts,** `ciguse init` takes flags instead of asking: `ciguse init --product iqos --pack-price 6.00 --currency EUR --pack-size 20 --day-start 04:00`.
 

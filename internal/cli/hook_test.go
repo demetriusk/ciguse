@@ -336,3 +336,40 @@ func TestCodexCigBlock(t *testing.T) {
 		t.Fatalf("events %q", got)
 	}
 }
+
+// Mid-turn, Codex ends the turn a blocked message arrives in, so a cig then is logged and
+// let through with a note for the model. While Codex waits, and in Claude Code, it blocks.
+func TestCigMidTurn(t *testing.T) {
+	dir, clock := setup(t)
+	cwd := quote(t.TempDir())
+	cig := func(agent, session string) string {
+		t.Helper()
+		stdin = strings.NewReader(`{"session_id":"` + session + `","cwd":` + cwd + `,"prompt":"cig"}`)
+		t.Cleanup(func() { stdin = os.Stdin })
+		var out, errb bytes.Buffer
+		Run([]string{"hook", agent, "cig"}, "test", &out, &errb)
+		return out.String()
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		runHookInput(t, `{"session_id":"`+agent+`","cwd":`+cwd+`,"prompt":"fix the tests"}`, agent, "UserPromptSubmit")
+	}
+
+	*clock = clock.Add(time.Minute)
+	out := cig("codex", "codex")
+	if strings.Contains(out, `"decision"`) || !strings.Contains(out, `"systemMessage":"ciguse · cigarette logged 12:42 · 1 today"`) ||
+		!strings.Contains(out, `"additionalContext":"The user's last message was a command for ciguse`) {
+		t.Fatalf("codex mid-turn: %s", out)
+	}
+	*clock = clock.Add(2 * time.Minute)
+	if out := cig("claude", "claude"); !strings.Contains(out, `"decision":"block"`) {
+		t.Fatalf("claude mid-turn: %s", out)
+	}
+	runHookInput(t, `{"session_id":"codex","cwd":`+cwd+`}`, "codex", "Stop")
+	*clock = clock.Add(2 * time.Minute)
+	if out := cig("codex", "codex"); !strings.Contains(out, `"decision":"block"`) {
+		t.Fatalf("codex waiting: %s", out)
+	}
+	if n := queryDB(t, dir, `SELECT count(*) FROM events`); n[0] != "3" {
+		t.Fatalf("%s uses logged, want 3", n[0])
+	}
+}

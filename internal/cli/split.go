@@ -33,8 +33,8 @@ func rateRatio(sp store.Split) (rr, lo, hi float64, ok bool) {
 // while it waits on the user.
 func printSplit(w io.Writer, sp store.Split) {
 	if sp.Sessions == 0 {
-		fmt.Fprintf(w, "%s\n%s\n\n", muted.Render("no Claude Code sessions in this range, so no working vs waiting split."),
-			muted.Render("the plugin records them: /plugin install ciguse --marketplace demetriusk/ciguse"))
+		fmt.Fprintf(w, "%s\n%s\n\n", muted.Render("no Claude Code or Codex sessions in this range, so no working vs waiting split."),
+			muted.Render("the plugins record them: ciguse setup claude, ciguse setup codex"))
 		return
 	}
 	a, b := sp.Uses[store.Working], sp.Uses[store.WaitingOnYou]
@@ -63,20 +63,33 @@ func printSplit(w io.Writer, sp store.Split) {
 		fmt.Fprintln(w)
 	}
 
-	if len(sp.Projects) < 2 {
+	agents := make([]store.Group, len(sp.Agents))
+	for i, g := range sp.Agents {
+		g.Name = map[string]string{"claude": "Claude Code", "codex": "Codex", store.Both: "both open", store.Other: "no agent / away"}[g.Name]
+		agents[i] = g
+	}
+	printGroups(w, "by agent", agents)
+	if len(sp.Projects) > 1 {
+		printGroups(w, "by project", sp.Projects)
+	}
+}
+
+// printGroups prints a breakdown's rows as uses per hour, working and waiting together.
+func printGroups(w io.Writer, title string, groups []store.Group) {
+	if len(groups) == 0 {
 		return
 	}
 	width := 0
-	for _, p := range sp.Projects {
-		width = max(width, len(p.Alias))
+	for _, g := range groups {
+		width = max(width, len(g.Name))
 	}
-	fmt.Fprintln(w, "by project "+muted.Render("(per hour, working + waiting)"))
-	for _, p := range sp.Projects {
+	fmt.Fprintln(w, title+" "+muted.Render("(per hour, working + waiting)"))
+	for _, g := range groups {
 		rate := "   –"
-		if p.Hours > 0 {
-			rate = fmt.Sprintf("%.2f", float64(p.Uses)/p.Hours.Hours())
+		if g.Hours > 0 {
+			rate = fmt.Sprintf("%.2f", float64(g.Uses)/g.Hours.Hours())
 		}
-		fmt.Fprintf(w, "  %s  %s · %d uses\n", p.Alias+strings.Repeat(" ", width-len(p.Alias)), rate, p.Uses)
+		fmt.Fprintf(w, "  %s  %s · %d uses\n", g.Name+strings.Repeat(" ", width-len(g.Name)), rate, g.Uses)
 	}
 	fmt.Fprintln(w)
 }

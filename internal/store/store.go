@@ -79,6 +79,10 @@ CREATE TABLE transitions (
 CREATE INDEX transitions_session_ts ON transitions(session_key, ts);
 `, `
 INSERT INTO products (id, label) VALUES ('pouch', 'Nicotine pouch');
+`, `
+ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude';
+UPDATE sessions SET agent = 'codex'
+	WHERE session_key IN (SELECT session_key FROM transitions WHERE cause LIKE 'codex %');
 `}
 
 type Store struct{ db *sql.DB }

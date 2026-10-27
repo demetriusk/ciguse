@@ -17,6 +17,7 @@ const (
 // AgentEvent is one hook call. Session and project arrive as keys, never as raw ids or paths.
 type AgentEvent struct {
 	Session string    // keyed session id
+	Agent   string    // claude or codex
 	Project string    // keyed project root
 	Alias   string    // project folder name, shown in reports
 	At      time.Time // when the hook process started; async hooks can finish out of order
@@ -35,11 +36,15 @@ func (s *Store) RecordAgent(e AgentEvent) error {
 			ON CONFLICT DO NOTHING`, e.Project, e.Alias, at); err != nil {
 			return err
 		}
-		if _, err := c.ExecContext(ctx, `INSERT INTO sessions (session_key, project_key, started_at, last_seen_at)
-			VALUES (?, ?, ?, ?)
+		agent := e.Agent
+		if agent == "" {
+			agent = "claude"
+		}
+		if _, err := c.ExecContext(ctx, `INSERT INTO sessions (session_key, project_key, started_at, last_seen_at, agent)
+			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT (session_key) DO UPDATE SET
 				started_at = min(started_at, excluded.started_at),
-				last_seen_at = max(last_seen_at, excluded.last_seen_at)`, e.Session, e.Project, at, at); err != nil {
+				last_seen_at = max(last_seen_at, excluded.last_seen_at)`, e.Session, e.Project, at, at, agent); err != nil {
 			return err
 		}
 		if e.State == "" {
@@ -60,4 +65,15 @@ func (s *Store) RecordAgent(e AgentEvent) error {
 			e.Session, at, e.State, e.Cause)
 		return err
 	})
+}
+
+// SessionState returns a session's latest recorded state, or "" when it has none.
+func (s *Store) SessionState(session string) (string, error) {
+	var state string
+	err := s.db.QueryRow(`SELECT state FROM transitions WHERE session_key = ? ORDER BY ts DESC, id DESC LIMIT 1`,
+		session).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return state, err
 }

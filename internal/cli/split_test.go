@@ -40,5 +40,7 @@ func TestReportSplitsWorkingAndWaiting(t *testing.T) {
 		"no session / away         –      0          –\n\n"+
 		"waiting vs working     2.0×   (95% CI 0.9–4.5)\n"+
 		"early: 24 uses across these states; ~190 for a firm read\n\n"+
+		"by agent (per hour, working + waiting)\n"+
+		"  Claude Code  16.00 · 24 uses\n\n"+
 		"Tue 27 Oct   24  ████████████████████████  today\n")
 }

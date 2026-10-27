@@ -301,8 +301,8 @@ func setupCodex(remove bool, stdout io.Writer) {
 	} else {
 		fmt.Fprintln(stdout, prefix, "Codex plugin installed")
 	}
-	fmt.Fprintf(stdout, "  %s  in Codex, run %s and trust the ciguse hooks. Codex skips new hooks until you do\n",
-		muted.Render("then"), accent.Render("/hooks"))
+	fmt.Fprintf(stdout, "  %s  start Codex and pick %s when it asks about new hooks (or run %s)\n",
+		muted.Render("then"), accent.Render("Trust all"), accent.Render("/hooks"))
 }
 
 // setupPlugin installs the plugin with the claude command, or says how to.

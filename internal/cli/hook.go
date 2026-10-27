@@ -120,6 +120,10 @@ func cigHook(agent string, at time.Time, stdout io.Writer) error {
 	if !ok {
 		return nil
 	}
+	// Codex sends a message typed mid-turn once the turn reaches its next tool call, and a
+	// block then ends that turn. So mid-turn the use is logged and the message let through,
+	// with a note telling the model to ignore it.
+	midTurn := agent == "codex" && working(in.SessionID)
 	// The confirmation is the CLI's own line, without color: it shows as plain text.
 	var out, errb bytes.Buffer
 	o, e := colorprofile.NewWriter(&out, nil), colorprofile.NewWriter(&errb, nil)
@@ -139,6 +143,17 @@ func cigHook(agent string, at time.Time, stdout io.Writer) error {
 		err = errors.New(strings.TrimSpace(errb.String()))
 		reason = "ciguse · couldn't save, run: ciguse " + strings.Join(args, " ")
 	}
+	if midTurn {
+		json.NewEncoder(stdout).Encode(map[string]any{
+			"systemMessage": reason,
+			"hookSpecificOutput": map[string]any{
+				"hookEventName": "UserPromptSubmit",
+				"additionalContext": "The user's last message was a command for ciguse, a local logger, " +
+					"and has already been handled. Ignore it and carry on with the task.",
+			},
+		})
+		return err
+	}
 	block := map[string]any{"decision": "block", "reason": reason}
 	// Claude Code also keeps the prompt text out of the block message. Codex validates
 	// hook output, so it gets only the fields it documents.
@@ -147,6 +162,26 @@ func cigHook(agent string, at time.Time, stdout io.Writer) error {
 	}
 	json.NewEncoder(stdout).Encode(block)
 	return err
+}
+
+// working reports whether ciguse last recorded the session as working. Any failure reads
+// as not working, so cig falls back to a plain block.
+func working(sessionID string) bool {
+	dir, err := dataDir()
+	if err != nil || sessionID == "" {
+		return false
+	}
+	key, err := hookKey(dir)
+	if err != nil {
+		return false
+	}
+	s, err := store.Open(filepath.Join(dir, "ciguse.db"), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	defer s.Close()
+	state, err := s.SessionState(keyed(key, "session", sessionID))
+	return err == nil && state == store.Working
 }
 
 func hook(args []string, at time.Time) error {
@@ -182,6 +217,7 @@ func hook(args []string, at time.Time) error {
 	}
 	root := projectRoot(in.Cwd)
 	e.Session = keyed(key, "session", in.SessionID)
+	e.Agent = args[0]
 	e.Project = keyed(key, "project", normalizePath(root))
 	e.Alias = filepath.Base(root)
 	e.At = at
