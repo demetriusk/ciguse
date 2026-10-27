@@ -26,13 +26,13 @@ var now = time.Now
 
 const tagline = "nicotine use alongside your coding agent"
 
-const commands = `  ciguse init             set up: what you smoke, pack price, day end
+const commands = `  ciguse init             set up: what you use, pack price, day end
   ciguse use [product]    log one use  (--ago 5m, --force)
   ciguse undo             remove the last use from the past 24h
   ciguse report           uses per day  (--days 14)
   ciguse version
 
-products: cigarette, iqos, glo, stick
+products: cigarette, iqos, glo, stick, pouch
 `
 
 const usage = "ciguse: " + tagline + "\n\n" + commands
@@ -92,7 +92,7 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 	t := now()
 	l, err := s.Log(store.Use{Product: first(pos), At: t.Add(-*ago), Now: t, Source: "cli", Force: *force})
 	if errors.Is(err, store.ErrUnknownProduct) {
-		fmt.Fprintf(stderr, "ciguse: %v (products: cigarette, iqos, glo, stick)\n", err)
+		fmt.Fprintf(stderr, "ciguse: %v (products: cigarette, iqos, glo, stick, pouch)\n", err)
 		return 2
 	}
 	if err != nil {
@@ -186,9 +186,9 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 
 func runInit(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("init", stderr)
-	product := fs.String("product", "", "default product: cigarette, iqos, glo, stick")
+	product := fs.String("product", "", "default product: cigarette, iqos, glo, stick, pouch")
 	price := fs.String("pack-price", "", "pack price, e.g. 5.00 (applies to --product, or the default product)")
-	size := fs.Int("pack-size", 20, "sticks per pack")
+	size := fs.Int("pack-size", 20, "units per pack or can")
 	currency := fs.String("currency", "", "currency code for --pack-price, e.g. EUR")
 	dayStart := fs.String("day-start", "", "local time a new day starts, e.g. 04:00")
 	if _, ok := parse(fs, args, 0); !ok {

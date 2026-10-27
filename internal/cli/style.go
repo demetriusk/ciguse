@@ -6,7 +6,7 @@ import "charm.land/lipgloss/v2"
 // the user's light or dark theme without querying the terminal. Output that isn't a
 // terminal, or runs with NO_COLOR, is stripped to plain text by the writer in Run.
 var (
-	colorAccent = lipgloss.Color("1") // ember: the lit tip, focus, today
+	colorAccent = lipgloss.Color("3") // ember: the lit tip, focus, today
 	colorMuted  = lipgloss.Color("8") // smoke and ash: prefixes, hints
 	colorFilter = lipgloss.Color("3") // the cigarette's filter
 

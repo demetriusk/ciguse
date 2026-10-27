@@ -33,9 +33,9 @@ irm https://raw.githubusercontent.com/demetriusk/ciguse/main/install.ps1 | iex
 ## Use
 
 ```sh
-ciguse init              # set up: asks what you smoke, pack price, when your day ends
+ciguse init              # set up: asks what you use, pack price, when your day ends
 ciguse use               # log one use of your default product
-ciguse use iqos          # cigarette, iqos, glo, stick
+ciguse use iqos          # cigarette, iqos, glo, stick, pouch
 ciguse use --ago 10m     # forgot to log it
 ciguse undo              # remove the last log from the past 24h
 ciguse report            # last 14 days

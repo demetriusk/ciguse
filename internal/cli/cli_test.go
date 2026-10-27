@@ -44,7 +44,7 @@ func TestUseUndoFlow(t *testing.T) {
 
 func TestUseRejectsBadInput(t *testing.T) {
 	setup(t)
-	expect(t, []string{"use", "vape"}, 2, "ciguse: unknown product \"vape\" (products: cigarette, iqos, glo, stick)\n")
+	expect(t, []string{"use", "vape"}, 2, "ciguse: unknown product \"vape\" (products: cigarette, iqos, glo, stick, pouch)\n")
 	expect(t, []string{"use", "--ago", "13h"}, 2, "ciguse: --ago must be between 0 and 12h\n")
 	expect(t, []string{"use", "iqos", "glo"}, 2, "ciguse use: unexpected argument \"glo\"\n")
 	expect(t, []string{"nope"}, 2, "ciguse: unknown command \"nope\"\n\n"+usage)

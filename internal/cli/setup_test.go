@@ -32,7 +32,7 @@ func TestInitAsksInATerminal(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	contains(t, out, "▀▒▒░   ciguse", "What do you smoke?  1 cigarette  2 iqos  3 glo  4 stick\n  › [cigarette] ",
+	contains(t, out, "▀▒▒░   ciguse", "What do you use?  1 cigarette  2 iqos  3 glo  4 stick  5 pouch\n  › [cigarette] ",
 		"default     iqos\n", "price       iqos 6.50 USD / 10\n", "day starts  05:00\n", "next\n  log a use       ciguse use\n")
 
 	// Settings stick: a later use is logged as IQOS.
@@ -55,13 +55,23 @@ func TestInitSkipsPackQuestionsWithoutAPrice(t *testing.T) {
 	contains(t, out, "default     glo\n", "price       not set", "day starts  04:00\n")
 }
 
+func TestInitAsksAboutACanForPouches(t *testing.T) {
+	setup(t)
+	out, code := ask(t, "pouch\n5.50\neur\n\n\n", "init")
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contains(t, out, "What does a can cost?", "How many in a can?", "price       pouch 5.50 EUR / 20\n")
+	expect(t, []string{"use"}, 0, "ciguse · pouch logged 12:41 · 1 today\n")
+}
+
 func TestInitReasksAfterABadAnswer(t *testing.T) {
 	setup(t)
 	out, code := ask(t, "7\n1\nabout five\n5\nEURO\nEUR\n0\n20\n25:00\n03:30\n", "init")
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	contains(t, out, "pick 1 to 4, or type its name", `"about five" is not a price like 5.00`,
+	contains(t, out, "pick 1 to 5, or type its name", `"about five" is not a price like 5.00`,
 		"a 3-letter code, such as EUR", "a number from 1 to 1000", `"25:00" is not a time like 04:00`,
 		"price       cigarette 5.00 EUR / 20\n", "day starts  03:30\n")
 }
@@ -78,7 +88,7 @@ func TestInitCancelledInputSavesNothing(t *testing.T) {
 func TestInitWithFlagsNeverAsks(t *testing.T) {
 	setup(t)
 	out, _ := ask(t, "", "init", "--day-start", "03:00")
-	if strings.Contains(out, "What do you smoke?") {
+	if strings.Contains(out, "What do you use?") {
 		t.Fatalf("asked with flags given:\n%s", out)
 	}
 	contains(t, out, "day starts  03:00\n")

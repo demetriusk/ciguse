@@ -87,7 +87,7 @@ func askSetup(s *store.Store, out io.Writer, product, price, currency *string, s
 	c := chat{bufio.NewReader(stdin), out}
 	fmt.Fprintln(out, "  "+muted.Render("A few questions. Enter keeps the value in brackets."))
 
-	*product, err = c.ask("What do you smoke?", strings.Join(choices, "  "), *product, func(v string) (string, error) {
+	*product, err = c.ask("What do you use?", strings.Join(choices, "  "), *product, func(v string) (string, error) {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(ids) {
 			return ids[n-1], nil
 		}
@@ -99,7 +99,11 @@ func askSetup(s *store.Store, out io.Writer, product, price, currency *string, s
 	if err != nil {
 		return err
 	}
-	*price, err = c.ask("What does a pack cost?", "optional, only used to show what you spend", *price, func(v string) (string, error) {
+	pack := "pack"
+	if *product == "pouch" {
+		pack = "can"
+	}
+	*price, err = c.ask("What does a "+pack+" cost?", "optional, only used to show what you spend", *price, func(v string) (string, error) {
 		if v == "" {
 			return "", nil
 		}
@@ -119,7 +123,7 @@ func askSetup(s *store.Store, out io.Writer, product, price, currency *string, s
 		if err != nil {
 			return err
 		}
-		sizeText, err = c.ask("How many in a pack?", "", sizeText, func(v string) (string, error) {
+		sizeText, err = c.ask("How many in a "+pack+"?", "", sizeText, func(v string) (string, error) {
 			if n, err := strconv.Atoi(v); err != nil || n < 1 || n > 1000 {
 				return "", errors.New("a number from 1 to 1000")
 			}

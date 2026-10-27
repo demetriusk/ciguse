@@ -77,6 +77,8 @@ CREATE TABLE transitions (
 	cause       TEXT NOT NULL
 );
 CREATE INDEX transitions_session_ts ON transitions(session_key, ts);
+`, `
+INSERT INTO products (id, label) VALUES ('pouch', 'Nicotine pouch');
 `}
 
 type Store struct{ db *sql.DB }
