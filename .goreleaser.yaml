@@ -1,0 +1,41 @@
+version: 2
+project_name: ciguse
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  # No version in the name, so releases/latest/download/<name> always works for the install scripts.
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [README.md, LICENSE*]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+
+homebrew_casks:
+  - name: ciguse
+    repository:
+      owner: demetriusk
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/demetriusk/ciguse
+    description: Log nicotine use from the terminal and see how it tracks your coding agent
+    # Binaries aren't signed or notarized yet; without this macOS refuses to run them.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/ciguse"]
+          end
