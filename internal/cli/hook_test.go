@@ -152,7 +152,7 @@ func TestHookFailsOpen(t *testing.T) {
 	runHookInput(t, input, "claude", "Stop")
 }
 
-func TestHookGivesUpQuicklyOnLockedDatabase(t *testing.T) {
+func TestHookFailsOpenOnLockedDatabase(t *testing.T) {
 	dir, _ := setup(t)
 	input := `{"session_id":"s","cwd":` + quote(t.TempDir()) + `}`
 	runHookInput(t, input, "claude", "SessionStart") // create the database
@@ -170,8 +170,8 @@ func TestHookGivesUpQuicklyOnLockedDatabase(t *testing.T) {
 
 	start := time.Now()
 	runHookInput(t, input, "claude", "UserPromptSubmit")
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("UserPromptSubmit waited %v on a locked database, want about 250ms", d)
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("UserPromptSubmit waited %v on a locked database, want about 2s", d)
 	}
 	if log, _ := os.ReadFile(filepath.Join(dir, "hook.log")); !strings.Contains(string(log), "UserPromptSubmit: ") {
 		t.Fatalf("lock failure not logged:\n%s", log)

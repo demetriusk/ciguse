@@ -96,12 +96,8 @@ func hook(args []string, at time.Time) error {
 	e.At = at
 	e.Cause = args[1]
 
-	// The prompt waits on UserPromptSubmit, so give up on a lock quickly there.
-	busy := 2 * time.Second
-	if args[1] == "UserPromptSubmit" {
-		busy = 250 * time.Millisecond
-	}
-	s, err := store.Open(filepath.Join(dir, "ciguse.db"), busy)
+	// Every recording hook runs async, so nothing the user waits on sits behind this lock wait.
+	s, err := store.Open(filepath.Join(dir, "ciguse.db"), 2*time.Second)
 	if err != nil {
 		return err
 	}

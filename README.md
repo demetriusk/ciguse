@@ -49,7 +49,7 @@ A second log within 90 seconds is treated as an accidental repeat and skipped; `
 
 ## Claude Code
 
-The plugin records when Claude Code is working and when it's waiting on you. It needs ciguse 0.2.0 or later on your PATH: update first (`brew upgrade ciguse`), because older versions block every prompt when the plugin calls them.
+The plugin records when Claude Code is working and when it's waiting on you. It needs ciguse 0.2.0 or later on your PATH (`brew upgrade ciguse`); older versions record nothing.
 
 ```text
 /plugin install ciguse --marketplace demetriusk/ciguse

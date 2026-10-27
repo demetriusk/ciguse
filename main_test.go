@@ -14,8 +14,10 @@ import (
 	"github.com/demetriusk/ciguse/internal/store"
 )
 
-// TestHookLatency runs the built binary the way Claude Code does. A UserPromptSubmit hook
-// holds the user's prompt until it exits, so its p95 must stay under 30 ms (spec section 6).
+// TestHookLatency runs the built binary the way Claude Code does and logs where the time goes.
+// The recording hooks all run async, so nothing here holds the user's prompt and nothing is
+// asserted yet: the 30 ms budget (spec section 6) applies to step 3's sync `cig` check, which
+// skips the database and costs about one process start.
 // It only runs with CIGUSE_LATENCY=1, on its own: alongside other packages' tests the
 // machine is busy and the numbers mean nothing.
 func TestHookLatency(t *testing.T) {
@@ -62,16 +64,14 @@ func TestHookLatency(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if p95 := measure(t, "UserPromptSubmit hook", hook); p95 > 30*time.Millisecond {
-		t.Errorf("hook p95 %v is over the 30ms budget", p95)
-	}
+	measure(t, "recording hook (async)", hook)
 	if log, err := os.ReadFile(filepath.Join(home, "hook.log")); err == nil {
 		t.Errorf("hook logged errors:\n%s", log)
 	}
 }
 
-// measure runs fn 60 times, logs p50, p95 and max, and returns p95.
-func measure(t *testing.T, name string, fn func()) time.Duration {
+// measure runs fn 60 times and logs p50, p95 and max.
+func measure(t *testing.T, name string, fn func()) {
 	t.Helper()
 	var ds []time.Duration
 	for range 60 {
@@ -80,7 +80,5 @@ func measure(t *testing.T, name string, fn func()) time.Duration {
 		ds = append(ds, time.Since(start))
 	}
 	slices.Sort(ds)
-	p95 := ds[len(ds)*95/100]
-	t.Logf("%s on %s: p50 %v, p95 %v, max %v", name, runtime.GOOS, ds[len(ds)/2], p95, ds[len(ds)-1])
-	return p95
+	t.Logf("%s on %s: p50 %v, p95 %v, max %v", name, runtime.GOOS, ds[len(ds)/2], ds[len(ds)*95/100], ds[len(ds)-1])
 }

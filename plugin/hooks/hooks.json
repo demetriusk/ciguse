@@ -5,7 +5,7 @@
       { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "SessionStart"], "async": true }] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "UserPromptSubmit"], "timeout": 5 }] }
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "UserPromptSubmit"], "async": true }] }
     ],
     "PostToolUse": [
       { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "PostToolUse"], "async": true }] }
