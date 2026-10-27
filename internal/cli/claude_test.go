@@ -2,11 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/demetriusk/ciguse/internal/store"
 )
 
 func TestSetKey(t *testing.T) {
@@ -92,6 +97,38 @@ func TestSetupClaudeWrapsAndRestores(t *testing.T) {
 		t.Fatalf("not restored byte for byte:\n%s", got)
 	}
 	expect(t, []string{"setup", "claude", "--remove"}, 0, "ciguse · ciguse isn't in the status line, nothing to undo\n")
+}
+
+// A wrapped status line without a timer gets one, so logs from other sessions show up.
+// 0.6.0 left it out; running setup again adds it and --remove still restores the original.
+func TestSetupClaudeAddsARefreshTimer(t *testing.T) {
+	setup(t)
+	const orig = "{\n  \"statusLine\": {\"type\": \"command\", \"command\": \"echo mine\"}\n}\n"
+	path := claudeHome(t, orig)
+	run(t, "setup", "claude")
+	got, _ := os.ReadFile(path)
+	if !strings.Contains(string(got), `"refreshInterval": 15`) {
+		t.Fatalf("no timer added:\n%s", got)
+	}
+
+	// What 0.6.0 wrote: the wrap without a timer, with its hash stored.
+	old := strings.Replace(string(got), ",\n    \"refreshInterval\": 15", "", 1)
+	os.WriteFile(path, []byte(old), 0o600)
+	sum := sha256.Sum256([]byte(old))
+	s, _ := store.Open(filepath.Join(os.Getenv("CIGUSE_HOME"), "ciguse.db"), time.Second)
+	s.SetConfig(cfgWritten, hex.EncodeToString(sum[:]))
+	s.Close()
+
+	out, _ := run(t, "setup", "claude")
+	contains(t, out, "now refreshes every 15 seconds")
+	want := strings.Replace(old, `--wrap",`, `--wrap",`+"\n    \"refreshInterval\": 15,", 1)
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Fatalf("timer not added in place:\n%s", got)
+	}
+	run(t, "setup", "claude", "--remove")
+	if got, _ := os.ReadFile(path); string(got) != orig {
+		t.Fatalf("not restored byte for byte:\n%s", got)
+	}
 }
 
 func TestSetupClaudeWithoutSettingsFile(t *testing.T) {

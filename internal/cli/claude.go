@@ -196,15 +196,23 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, fmt.Errorf("%s: %w", tildePath(settings), err))
 	}
 	before, _ := line["command"].(string)
-	if strings.Contains(before, "ciguse statusline") {
+	// Without a refresh timer, a log from another session or the hotkey shows only after
+	// this session's next message. A timer the user set stays as it is.
+	_, timed := line["refreshInterval"]
+	again := strings.Contains(before, "ciguse statusline")
+	if again && timed {
 		fmt.Fprintln(stdout, prefix, "status line already shows ciguse")
 		return 0
 	}
-	if before != "" {
+	switch {
+	case again: // set up by ciguse 0.6.0, which kept a missing timer missing
+	case before != "":
 		line["command"] = "ciguse statusline --wrap"
-	} else {
-		// Without a refresh, a hotkey log would show only after the next message.
-		line = map[string]any{"type": "command", "command": "ciguse statusline", "refreshInterval": 15}
+	default:
+		line = map[string]any{"type": "command", "command": "ciguse statusline"}
+	}
+	if !timed {
+		line["refreshInterval"] = 15
 	}
 	value, _ := json.MarshalIndent(line, "  ", "  ")
 	updated, err := setKey(old, "statusLine", value)
@@ -212,18 +220,32 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, fmt.Errorf("%s: %w", tildePath(settings), err))
 	}
 
-	if err := os.WriteFile(backup, old, 0o600); err != nil {
+	// The backup and the wrapped command come from the first setup only; a later fix keeps
+	// them, so --remove still puts back the original byte for byte.
+	written, err := s.Config(cfgWritten)
+	if err != nil {
 		return fail(stderr, err)
 	}
-	sum := sha256.Sum256(updated)
-	if err := s.SetConfig(cfgWrapped, before); err != nil {
-		return fail(stderr, err)
+	if !again {
+		if err := os.WriteFile(backup, old, 0o600); err != nil {
+			return fail(stderr, err)
+		}
+		if err := s.SetConfig(cfgWrapped, before); err != nil {
+			return fail(stderr, err)
+		}
 	}
-	if err := s.SetConfig(cfgWritten, hex.EncodeToString(sum[:])); err != nil {
-		return fail(stderr, err)
+	if !again || written != "" {
+		sum := sha256.Sum256(updated)
+		if err := s.SetConfig(cfgWritten, hex.EncodeToString(sum[:])); err != nil {
+			return fail(stderr, err)
+		}
 	}
 	if err := writeFileAtomic(settings, updated); err != nil {
 		return fail(stderr, err)
+	}
+	if again {
+		fmt.Fprintln(stdout, prefix, "status line now refreshes every 15 seconds, so logs from other sessions show up")
+		return 0
 	}
 	if before == "" {
 		before = "none"
