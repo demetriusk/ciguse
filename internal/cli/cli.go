@@ -39,9 +39,9 @@ const usage = "ciguse: " + tagline + "\n\n" + commands
 
 // Run executes ciguse with args (program name excluded) and returns the exit code.
 func Run(args []string, version string, stdout, stderr io.Writer) int {
-	// Hooks print nothing, so they skip terminal detection entirely.
+	// Hooks print nothing, or JSON for Claude Code, so they skip terminal detection entirely.
 	if len(args) > 0 && args[0] == "hook" {
-		return runHook(args[1:])
+		return runHook(args[1:], stdout)
 	}
 	if f, ok := stdout.(*os.File); ok {
 		lipgloss.EnableLegacyWindowsANSI(f)
@@ -56,7 +56,7 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "use":
-		return runUse(args[1:], stdout, stderr)
+		return runUse(args[1:], "cli", stdout, stderr)
 	case "undo":
 		return runUndo(args[1:], stdout, stderr)
 	case "report":
@@ -71,7 +71,8 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 	return 2
 }
 
-func runUse(args []string, stdout, stderr io.Writer) int {
+// runUse logs one use. source records where it came from: cli, or prompt for cig.
+func runUse(args []string, source string, stdout, stderr io.Writer) int {
 	fs := newFlags("use", stderr)
 	ago := fs.Duration("ago", 0, "how long ago it happened, e.g. 5m (max 12h)")
 	force := fs.Bool("force", false, "log even if a use was logged in the last 90s")
@@ -90,7 +91,7 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 	defer s.Close()
 
 	t := now()
-	l, err := s.Log(store.Use{Product: first(pos), At: t.Add(-*ago), Now: t, Source: "cli", Force: *force})
+	l, err := s.Log(store.Use{Product: first(pos), At: t.Add(-*ago), Now: t, Source: source, Force: *force})
 	if errors.Is(err, store.ErrUnknownProduct) {
 		fmt.Fprintf(stderr, "ciguse: %v (products: cigarette, iqos, glo, stick, pouch)\n", err)
 		return 2

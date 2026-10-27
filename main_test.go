@@ -15,9 +15,8 @@ import (
 )
 
 // TestHookLatency runs the built binary the way Claude Code does and logs where the time goes.
-// The recording hooks all run async, so nothing here holds the user's prompt and nothing is
-// asserted yet: the 30 ms budget (spec section 6) applies to step 3's sync `cig` check, which
-// skips the database and costs about one process start.
+// The recording hooks all run async, so only the sync cig check holds the user's prompt: it
+// must stay under the 30 ms budget (spec section 6) for a prompt that isn't cig.
 // It only runs with CIGUSE_LATENCY=1, on its own: alongside other packages' tests the
 // machine is busy and the numbers mean nothing.
 func TestHookLatency(t *testing.T) {
@@ -37,15 +36,17 @@ func TestHookLatency(t *testing.T) {
 	input := `{"session_id":"bench","transcript_path":"/tmp/t.jsonl","cwd":` + string(cwd) +
 		`,"permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":` + string(prompt) + `}`
 
-	hook := func() {
-		cmd := exec.Command(bin, "hook", "claude", "UserPromptSubmit")
-		cmd.Env = append(os.Environ(), "CIGUSE_HOME="+home)
-		cmd.Stdin = strings.NewReader(input)
-		if out, err := cmd.CombinedOutput(); err != nil || len(out) > 0 {
-			t.Fatalf("hook: %v, output %q", err, out)
+	hook := func(event string) func() {
+		return func() {
+			cmd := exec.Command(bin, "hook", "claude", event)
+			cmd.Env = append(os.Environ(), "CIGUSE_HOME="+home)
+			cmd.Stdin = strings.NewReader(input)
+			if out, err := cmd.CombinedOutput(); err != nil || len(out) > 0 {
+				t.Fatalf("hook %s: %v, output %q", event, err, out)
+			}
 		}
 	}
-	hook() // the first run creates the database and the secret
+	hook("UserPromptSubmit")() // the first run creates the database and the secret
 
 	// The breakdown shows where the time goes when the budget is missed.
 	measure(t, "process start (ciguse version)", func() {
@@ -64,14 +65,17 @@ func TestHookLatency(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	measure(t, "recording hook (async)", hook)
+	measure(t, "recording hook (async)", hook("UserPromptSubmit"))
+	if p95 := measure(t, "cig check on another prompt (sync)", hook("cig")); p95 > 30*time.Millisecond {
+		t.Errorf("cig check p95 %v, budget 30ms", p95)
+	}
 	if log, err := os.ReadFile(filepath.Join(home, "hook.log")); err == nil {
 		t.Errorf("hook logged errors:\n%s", log)
 	}
 }
 
-// measure runs fn 60 times and logs p50, p95 and max.
-func measure(t *testing.T, name string, fn func()) {
+// measure runs fn 60 times, logs p50, p95 and max, and returns p95.
+func measure(t *testing.T, name string, fn func()) time.Duration {
 	t.Helper()
 	var ds []time.Duration
 	for range 60 {
@@ -81,4 +85,5 @@ func measure(t *testing.T, name string, fn func()) {
 	}
 	slices.Sort(ds)
 	t.Logf("%s on %s: p50 %v, p95 %v, max %v", name, runtime.GOOS, ds[len(ds)/2], ds[len(ds)*95/100], ds[len(ds)-1])
+	return ds[len(ds)*95/100]
 }

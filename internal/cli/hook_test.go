@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,5 +212,81 @@ func TestHookKeyRaceAgreesOnOneSecret(t *testing.T) {
 	}
 	if files, _ := os.ReadDir(dir); len(files) != 1 {
 		t.Fatalf("leftover temp files: %d entries", len(files))
+	}
+}
+
+// cigHookOutput runs the sync cig hook on a prompt and returns what it prints.
+func cigHookOutput(t *testing.T, prompt string) string {
+	t.Helper()
+	p, _ := json.Marshal(prompt)
+	stdin = strings.NewReader(`{"session_id":"s","cwd":` + quote(t.TempDir()) + `,"prompt":` + string(p) + `}`)
+	t.Cleanup(func() { stdin = os.Stdin })
+	var out, errb bytes.Buffer
+	if code := Run([]string{"hook", "claude", "cig"}, "test", &out, &errb); code != 0 || errb.Len() > 0 {
+		t.Fatalf("cig hook on %q: exit %d, stderr %q", prompt, code, errb.String())
+	}
+	return out.String()
+}
+
+func blocked(reason string) string {
+	return `{"decision":"block","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true},"reason":"` + reason + `"}` + "\n"
+}
+
+// Acceptance test 2: a cig prompt is logged and blocked; any other prompt passes untouched.
+func TestCigHook(t *testing.T) {
+	dir, clock := setup(t)
+	for _, prompt := range []string{"cigarette break ideas?", "cig break ideas?", "cig glo2", "cig undo --force", "explain cig", ""} {
+		if out := cigHookOutput(t, prompt); out != "" {
+			t.Fatalf("%q was blocked: %s", prompt, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ciguse.db")); !os.IsNotExist(err) {
+		t.Fatalf("a passing prompt touched the database: %v", err)
+	}
+
+	steps := []struct{ prompt, want string }{
+		{"cig", blocked("ciguse · cigarette logged 12:41 · 1 today")},
+		{"  CIG Pouch\n", blocked("ciguse · already logged one at 12:41, skipped (--force logs anyway)")},
+		{"cig pouch --force", blocked("ciguse · pouch logged 12:41 · 2 today")},
+		{"cig undo", blocked("ciguse · removed pouch 12:41 · 1 today")},
+		{"cig vape", blocked(`ciguse: unknown product \"vape\" (products: cigarette, iqos, glo, stick, pouch)`)},
+	}
+	for _, s := range steps {
+		if got := cigHookOutput(t, s.prompt); got != s.want {
+			t.Fatalf("%q\n got %s\nwant %s", s.prompt, got, s.want)
+		}
+	}
+	if got := queryDB(t, dir, `SELECT product_id || ' ' || source FROM events WHERE deleted_at IS NULL`); len(got) != 1 || got[0] != "cigarette prompt" {
+		t.Fatalf("events %q", got)
+	}
+
+	// The recording hook doesn't count a cig prompt as the start of a turn.
+	input := `{"session_id":"s","cwd":` + quote(t.TempDir()) + `,"prompt":"cig"}`
+	*clock = clock.Add(time.Minute)
+	runHookInput(t, input, "claude", "UserPromptSubmit")
+	if n := queryDB(t, dir, `SELECT count(*) FROM transitions`); n[0] != "0" {
+		t.Fatalf("cig started a turn: %s transitions", n[0])
+	}
+	runHookInput(t, strings.Replace(input, `"cig"`, `"fix the cig parser"`, 1), "claude", "UserPromptSubmit")
+	if n := queryDB(t, dir, `SELECT count(*) FROM transitions`); n[0] != "1" {
+		t.Fatalf("a normal prompt recorded %s transitions, want 1", n[0])
+	}
+}
+
+// A cig that can't be saved is still blocked, so it never reaches Claude, and the user
+// is told how to log it by hand.
+func TestCigHookFailsClosed(t *testing.T) {
+	dir, _ := setup(t)
+	if err := os.WriteFile(filepath.Join(dir, "ciguse.db"), []byte("this is not a database, just junk bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cigHookOutput(t, "cig iqos"), blocked("ciguse · couldn't save, run: ciguse use iqos"); got != want {
+		t.Fatalf("\n got %s\nwant %s", got, want)
+	}
+	if log, _ := os.ReadFile(filepath.Join(dir, "hook.log")); !strings.Contains(string(log), " cig: ") {
+		t.Fatalf("failure not logged:\n%s", log)
+	}
+	if out := cigHookOutput(t, "not a cig"); out != "" {
+		t.Fatalf("a passing prompt was blocked: %s", out)
 	}
 }

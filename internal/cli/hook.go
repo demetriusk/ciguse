@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,9 +12,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/demetriusk/ciguse/internal/store"
 )
@@ -22,10 +26,34 @@ import (
 var stdin io.Reader = os.Stdin
 
 // hookInput declares the only hook fields ciguse reads. Everything else Claude Code
-// sends, such as prompts, tool input and transcript paths, is never decoded.
+// sends, such as tool input and transcript paths, is never decoded.
 type hookInput struct {
 	SessionID string `json:"session_id"`
 	Cwd       string `json:"cwd"`
+	Prompt    string `json:"prompt"` // only compared against cig commands, never stored or logged
+}
+
+// cigRe matches a prompt typed as a ciguse command: cig, cig <product>, cig --force, cig undo.
+var cigRe = regexp.MustCompile(`^cig(?:\s+([a-z]+))?(?:\s+(--force))?$`)
+
+// cigArgs turns a cig prompt into ciguse arguments, such as [use pouch --force] or [undo].
+func cigArgs(prompt string) ([]string, bool) {
+	m := cigRe.FindStringSubmatch(strings.ToLower(strings.TrimSpace(prompt)))
+	switch {
+	case m == nil:
+		return nil, false
+	case m[1] == "undo" && m[2] == "":
+		return []string{"undo"}, true
+	case m[1] == "undo":
+		return nil, false
+	}
+	args := []string{"use"}
+	for _, a := range m[1:] {
+		if a != "" {
+			args = append(args, a)
+		}
+	}
+	return args, true
 }
 
 // hookEvents maps each Claude Code hook the plugin registers to what it records.
@@ -39,14 +67,15 @@ var hookEvents = map[string]store.AgentEvent{
 	"SessionEnd":        {State: store.Ended},
 }
 
-// runHook handles `ciguse hook claude <Event>`. It always exits 0 and prints nothing:
-// a non-zero exit can block the user's prompt, and stdout can end up in Claude's context.
-// Failures go to hook.log in the data directory instead.
-func runHook(args []string) int {
+// runHook handles `ciguse hook claude <Event>` and `ciguse hook claude cig`. It always
+// exits 0 and prints nothing but the cig block decision: a non-zero exit can block the
+// user's prompt, and stdout can end up in Claude's context. Failures go to hook.log in
+// the data directory instead.
+func runHook(args []string, stdout io.Writer) int {
 	at := now()
 	event := "hook"
 	if len(args) == 2 {
-		if _, ok := hookEvents[args[1]]; ok {
+		if _, ok := hookEvents[args[1]]; ok || args[1] == "cig" {
 			event = args[1]
 		}
 	}
@@ -56,10 +85,55 @@ func runHook(args []string) int {
 			logHookError(at, event, fmt.Errorf("panic: %v", r))
 		}
 	}()
-	if err := hook(args, at); err != nil {
+	var err error
+	if event == "cig" && args[0] == "claude" {
+		err = cigHook(at, stdout)
+	} else {
+		err = hook(args, at)
+	}
+	if err != nil {
 		logHookError(at, event, err)
 	}
 	return 0
+}
+
+// cigHook is the one sync hook, on UserPromptSubmit. A cig prompt is logged and blocked,
+// so it never reaches Claude and the user sees only the confirmation. Any other prompt
+// passes with no output, before anything is read from disk.
+func cigHook(at time.Time, stdout io.Writer) error {
+	var in hookInput
+	if err := json.NewDecoder(stdin).Decode(&in); err != nil {
+		return errors.New("hook input is not valid JSON") // the decoder's own message can quote input
+	}
+	args, ok := cigArgs(in.Prompt)
+	if !ok {
+		return nil
+	}
+	// The confirmation is the CLI's own line, without color: it shows as plain text.
+	var out, errb bytes.Buffer
+	o, e := colorprofile.NewWriter(&out, nil), colorprofile.NewWriter(&errb, nil)
+	var code int
+	if args[0] == "undo" {
+		code = runUndo(nil, o, e)
+	} else {
+		code = runUse(args[1:], "prompt", o, e)
+	}
+	reason := strings.TrimSpace(out.String())
+	var err error
+	switch code {
+	case 0:
+	case 2: // an unknown product: show it, the user can retype
+		reason = strings.TrimSpace(errb.String())
+	default: // never drop a cig silently or let it reach Claude
+		err = errors.New(strings.TrimSpace(errb.String()))
+		reason = "ciguse · couldn't save, run: ciguse " + strings.Join(args, " ")
+	}
+	json.NewEncoder(stdout).Encode(map[string]any{
+		"decision":           "block",
+		"reason":             reason,
+		"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "suppressOriginalPrompt": true},
+	})
+	return err
 }
 
 func hook(args []string, at time.Time) error {
@@ -73,6 +147,10 @@ func hook(args []string, at time.Time) error {
 	var in hookInput
 	if err := json.NewDecoder(stdin).Decode(&in); err != nil {
 		return errors.New("hook input is not valid JSON") // the decoder's own message can quote input
+	}
+	// The cig hook blocks a cig prompt, so no turn starts.
+	if _, ok := cigArgs(in.Prompt); ok && args[1] == "UserPromptSubmit" {
+		return nil
 	}
 	if in.SessionID == "" || in.Cwd == "" {
 		return errors.New("hook input lacks session_id or cwd")

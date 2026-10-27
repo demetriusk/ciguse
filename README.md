@@ -60,6 +60,8 @@ The plugin records when Claude Code is working and when it's waiting on you.
 /plugin install ciguse --marketplace demetriusk/ciguse
 ```
 
+Then type `cig` as a prompt to log a use without leaving Claude Code. `cig pouch`, `cig --force` and `cig undo` work too. The prompt never reaches Claude: you see only the confirmation line.
+
 Per session it stores a keyed session id, a keyed project path, the repository's folder name, and when the state changed. Prompts, tool input, file paths and transcripts are never read into storage.
 
 ## Data

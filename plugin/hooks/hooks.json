@@ -1,11 +1,12 @@
 {
-  "description": "Records agent working/waiting state for ciguse. Each hook runs the ciguse binary directly, with no shell.",
+  "description": "Records agent working/waiting state for ciguse and logs a use when you type cig. Each hook runs the ciguse binary directly, with no shell.",
   "hooks": {
     "SessionStart": [
       { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "SessionStart"], "async": true }] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "UserPromptSubmit"], "async": true }] }
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "UserPromptSubmit"], "async": true }] },
+      { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "cig"] }] }
     ],
     "PostToolUse": [
       { "hooks": [{ "type": "command", "command": "ciguse", "args": ["hook", "claude", "PostToolUse"], "async": true }] }
