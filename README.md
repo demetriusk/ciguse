@@ -2,7 +2,9 @@
 
 Log nicotine use from the terminal, one word at a time, and see how it tracks your work with coding agents. Local only: no account, no network, no telemetry.
 
-Status: early. Logging and daily reports work; Claude Code integration is next.
+![Installing ciguse, answering the setup questions, logging two uses and opening the 7-day report](docs/demo.gif)
+
+Status: early. Logging, daily reports and the Claude Code plugin work; the report that compares working and waiting time is next.
 
 ## Install
 
