@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/demetriusk/ciguse/internal/store"
 )
 
 // TestHookLatency runs the built binary the way Claude Code does. A UserPromptSubmit hook
@@ -33,30 +35,52 @@ func TestHookLatency(t *testing.T) {
 	input := `{"session_id":"bench","transcript_path":"/tmp/t.jsonl","cwd":` + string(cwd) +
 		`,"permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":` + string(prompt) + `}`
 
-	run := func() time.Duration {
+	hook := func() {
 		cmd := exec.Command(bin, "hook", "claude", "UserPromptSubmit")
 		cmd.Env = append(os.Environ(), "CIGUSE_HOME="+home)
 		cmd.Stdin = strings.NewReader(input)
-		start := time.Now()
-		out, err := cmd.CombinedOutput()
-		d := time.Since(start)
-		if err != nil || len(out) > 0 {
+		if out, err := cmd.CombinedOutput(); err != nil || len(out) > 0 {
 			t.Fatalf("hook: %v, output %q", err, out)
 		}
-		return d
 	}
-	run() // the first run creates the database and the secret
-	var ds []time.Duration
-	for range 60 {
-		ds = append(ds, run())
-	}
-	slices.Sort(ds)
-	p50, p95 := ds[len(ds)/2], ds[len(ds)*95/100]
-	t.Logf("UserPromptSubmit hook on %s: p50 %v, p95 %v, max %v over %d runs", runtime.GOOS, p50, p95, ds[len(ds)-1], len(ds))
-	if p95 > 30*time.Millisecond {
-		t.Errorf("p95 %v is over the 30ms budget", p95)
+	hook() // the first run creates the database and the secret
+
+	// The breakdown shows where the time goes when the budget is missed.
+	measure(t, "process start (ciguse version)", func() {
+		if err := exec.Command(bin, "version").Run(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	db := filepath.Join(t.TempDir(), "ciguse.db")
+	measure(t, "database open + write, in process", func() {
+		s, err := store.Open(db, 250*time.Millisecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		if err := s.RecordAgent(store.AgentEvent{Session: "s", Project: "p", Alias: "a", At: time.Now(), State: store.Working, Cause: "UserPromptSubmit"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if p95 := measure(t, "UserPromptSubmit hook", hook); p95 > 30*time.Millisecond {
+		t.Errorf("hook p95 %v is over the 30ms budget", p95)
 	}
 	if log, err := os.ReadFile(filepath.Join(home, "hook.log")); err == nil {
 		t.Errorf("hook logged errors:\n%s", log)
 	}
+}
+
+// measure runs fn 60 times, logs p50, p95 and max, and returns p95.
+func measure(t *testing.T, name string, fn func()) time.Duration {
+	t.Helper()
+	var ds []time.Duration
+	for range 60 {
+		start := time.Now()
+		fn()
+		ds = append(ds, time.Since(start))
+	}
+	slices.Sort(ds)
+	p95 := ds[len(ds)*95/100]
+	t.Logf("%s on %s: p50 %v, p95 %v, max %v", name, runtime.GOOS, ds[len(ds)/2], p95, ds[len(ds)-1])
+	return p95
 }
