@@ -139,12 +139,20 @@ func runDoctor(args []string, version string, stdout, stderr io.Writer) int {
 	if err != nil {
 		row("database", accent.Render(err.Error()))
 	} else {
-		row("database", fmt.Sprintf("ok · %d uses · %d Claude Code sessions", h.Uses, h.Sessions))
+		row("database", fmt.Sprintf("ok · %d uses · %d agent sessions", h.Uses, h.Sessions))
 	}
 	if h.LastHook.IsZero() {
-		row("last hook", "none yet · /plugin install ciguse --marketplace demetriusk/ciguse")
+		row("last hook", "none yet · ciguse setup claude")
 	} else {
 		row("last hook", h.LastHook.In(time.Local).Format("02 Jan 15:04")+" · "+h.LastCause)
+	}
+	// Codex skips its plugin's hooks until they're trusted, so say whether any have run.
+	if _, err := exec.LookPath("codex"); err == nil {
+		if h.LastCodex.IsZero() {
+			row("codex hooks", "none yet · ciguse setup codex, then trust them in /hooks")
+		} else {
+			row("codex hooks", "last "+h.LastCodex.In(time.Local).Format("02 Jan 15:04"))
+		}
 	}
 	settings := claudeSettingsPath()
 	data, _ := os.ReadFile(settings)

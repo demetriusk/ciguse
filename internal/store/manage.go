@@ -60,6 +60,7 @@ type Health struct {
 	Uses, Sessions int
 	LastHook       time.Time // last state change any hook recorded; zero when none
 	LastCause      string
+	LastCodex      time.Time // last state change a Codex hook recorded; zero when none
 }
 
 func (s *Store) Health() (Health, error) {
@@ -73,6 +74,14 @@ func (s *Store) Health() (Health, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, nil
 	}
+	if err != nil {
+		return h, err
+	}
 	h.LastHook = time.UnixMilli(ts)
+	err = s.db.QueryRow(`SELECT ts FROM transitions WHERE cause LIKE 'codex %' ORDER BY ts DESC LIMIT 1`).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return h, nil
+	}
+	h.LastCodex = time.UnixMilli(ts)
 	return h, err
 }

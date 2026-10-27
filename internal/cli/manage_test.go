@@ -58,19 +58,33 @@ func TestExport(t *testing.T) {
 }
 
 func TestDoctor(t *testing.T) {
-	dir, _ := setup(t)
+	dir, clock := setup(t)
 	claudeHome(t, "")
+	t.Setenv("PATH", t.TempDir()) // no codex installed: no codex row
 	out, code := run(t, "doctor")
-	if code != 0 {
+	if code != 0 || strings.Contains(out, "codex") {
 		t.Fatalf("exit %d: %s", code, out)
 	}
-	contains(t, out, "version      test", "database     ok · 0 uses · 0 Claude Code sessions", "last hook    none yet",
+	contains(t, out, "version      test", "database     ok · 0 uses · 0 agent sessions", "last hook    none yet",
 		"status line  not set · ciguse setup claude", "hook errors  none")
 
 	os.WriteFile(filepath.Join(dir, "hook.log"), []byte("2026-10-27T11:00:00Z Stop: database is locked\n"), 0o600)
 	runHookInput(t, `{"session_id":"s","cwd":`+quote(t.TempDir())+`}`, "claude", "Stop")
 	out, _ = run(t, "doctor")
-	contains(t, out, "1 Claude Code sessions", "last hook    27 Oct 12:41 · Stop", "hook errors  last 1 of hook.log", "Stop: database is locked")
+	contains(t, out, "1 agent sessions", "last hook    27 Oct 12:41 · Stop", "hook errors  last 1 of hook.log", "Stop: database is locked")
+
+	// With codex installed, doctor says whether its hooks have run: they don't until trusted.
+	bin := t.TempDir()
+	for _, name := range []string{"codex", "codex.exe"} {
+		os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755)
+	}
+	t.Setenv("PATH", bin)
+	out, _ = run(t, "doctor")
+	contains(t, out, "codex hooks  none yet · ciguse setup codex, then trust them in /hooks")
+	*clock = clock.Add(60e9)
+	runHookInput(t, `{"session_id":"thr_1","cwd":`+quote(t.TempDir())+`}`, "codex", "Stop")
+	out, _ = run(t, "doctor")
+	contains(t, out, "codex hooks  last 27 Oct 12:42", "last hook    27 Oct 12:42 · codex Stop")
 }
 
 func TestPurge(t *testing.T) {
