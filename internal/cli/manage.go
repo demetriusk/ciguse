@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/demetriusk/ciguse/internal/store"
 )
 
 // runProject handles `ciguse project alias <name>`, run in the project's folder.
@@ -59,6 +61,7 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 func runExport(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("export", stderr)
 	asCSV := fs.Bool("csv", false, "CSV with a header row instead of JSON lines")
+	share := fs.Bool("share", false, "CSV of day totals, safe to post publicly")
 	if _, ok := parse(fs, args, 0); !ok {
 		return 2
 	}
@@ -67,6 +70,9 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	defer s.Close()
+	if *share {
+		return exportShare(s, stdout, stderr)
+	}
 	es, err := s.Events()
 	if err != nil {
 		return fail(stderr, err)
@@ -108,6 +114,48 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 			obj["nicotine_mg"] = float64(e.NicotineUG.Int64) / 1000
 		}
 		j.Encode(obj)
+	}
+	c.Flush()
+	if err := c.Error(); err != nil {
+		return fail(stderr, err)
+	}
+	return 0
+}
+
+// exportShare writes one CSV row per full day since the first use: hours and uses by agent
+// state, estimated nicotine, and hours and uses per agent (uses while both were open count
+// for neither). It's for posting publicly, so it has no project names, session keys,
+// paths, prices, times of day or undone uses.
+func exportShare(s *store.Store, stdout, stderr io.Writer) int {
+	st, err := s.Settings()
+	if err != nil {
+		return fail(stderr, err)
+	}
+	r, err := s.Report(now(), 3660) // ten years: every day since the first use
+	if err != nil {
+		return fail(stderr, err)
+	}
+	c := csv.NewWriter(stdout)
+	c.Write([]string{"date", "hours_working", "hours_waiting", "uses_working", "uses_waiting", "uses_away", "nicotine_mg",
+		"hours_claude", "uses_claude", "hours_codex", "uses_codex"})
+	hours := func(d time.Duration) string { return fmt.Sprintf("%.2f", d.Hours()) }
+	tracked := r.Days[len(r.Days)-r.Active:]
+	for _, d := range tracked[:max(len(tracked)-1, 0)] { // today isn't over
+		from := time.Date(d.Date.Year(), d.Date.Month(), d.Date.Day(), 0, 0, 0, 0, d.Date.Location()).Add(st.DayStart)
+		sp, err := s.Split(from, from.AddDate(0, 0, 1))
+		if err != nil {
+			return fail(stderr, err)
+		}
+		agents := map[string]store.Group{}
+		for _, g := range sp.Agents {
+			agents[g.Name] = g
+		}
+		c.Write([]string{d.Date.Format(time.DateOnly),
+			hours(sp.Hours[store.Working]), hours(sp.Hours[store.WaitingOnYou]),
+			strconv.Itoa(sp.Uses[store.Working]), strconv.Itoa(sp.Uses[store.WaitingOnYou]), strconv.Itoa(sp.Uses[store.Other]),
+			fmt.Sprintf("%.1f", float64(d.NicotineUG)/1000),
+			hours(agents["claude"].Hours), strconv.Itoa(agents["claude"].Uses),
+			hours(agents["codex"].Hours), strconv.Itoa(agents["codex"].Uses)})
 	}
 	c.Flush()
 	if err := c.Error(); err != nil {

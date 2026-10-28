@@ -368,8 +368,9 @@ func (s *Store) Undo(now time.Time) (Undone, error) {
 }
 
 type Day struct {
-	Date time.Time // calendar date; only year, month and day are meaningful
-	Uses int
+	Date       time.Time // calendar date; only year, month and day are meaningful
+	Uses       int
+	NicotineUG int64 // estimated, in micrograms
 }
 
 // Dose is how many uses in a report had one product at one nicotine estimate.
@@ -467,6 +468,7 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 		}
 		if nicotine.Valid {
 			doses[Dose{Product: product, UG: nicotine.Int64}]++
+			r.Days[i].NicotineUG += nicotine.Int64
 		}
 	}
 	for d, n := range doses {

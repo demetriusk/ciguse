@@ -36,7 +36,7 @@ const commands = `  ciguse init             set up: what you use, pack price, da
   ciguse setup claude     plugin, and today's count in the status line
   ciguse setup codex      plugin for Codex
   ciguse project alias    rename this folder's project in reports
-  ciguse export           every use as JSON lines  (--csv)
+  ciguse export           every use as JSON lines  (--csv, --share)
   ciguse doctor           check the setup, show plugin errors
   ciguse purge            delete all data
   ciguse version

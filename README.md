@@ -52,7 +52,7 @@ After a week or two, run `ciguse report` to see working vs waiting.
 | `ciguse report` | the last 14 days: working vs waiting, by agent, then uses per day |
 | `ciguse doctor` | something looks off? start here |
 
-Run `ciguse` for everything else: `export --csv`, `project alias`, `purge`, `setup claude --remove`.
+Run `ciguse` for everything else: `export --csv`, `export --share`, `project alias`, `purge`, `setup claude --remove`.
 
 ## Good to know
 
@@ -105,6 +105,8 @@ Everything lives in one folder, readable only by your user:
 - Windows: `%LOCALAPPDATA%\ciguse\`
 
 Set `CIGUSE_HOME` to use another folder. `ciguse purge` deletes it all.
+
+`ciguse export --share` prints one CSV row per day, safe to post publicly: hours and uses while your agent works or waits, estimated nicotine, and per-agent totals. No project names, paths, prices, times of day or undone uses.
 
 ## License
 

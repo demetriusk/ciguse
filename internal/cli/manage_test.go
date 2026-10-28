@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // run runs ciguse and returns everything it printed, for checks on part of the output.
@@ -54,6 +55,51 @@ func TestExport(t *testing.T) {
 	if !strings.Contains(out, `"nicotine_mg":0.6,"pack_price":"6.00","pack_size":20,"product":"iqos","source":"cli","time":`) ||
 		!strings.Contains(out, `"pack_price":null,"pack_size":null,"product":"pouch"`) {
 		t.Fatalf("json:\n%s", out)
+	}
+}
+
+// export --share is for posting publicly: day totals only, nothing that names a project or a
+// session, no prices, no times of day, no undone uses.
+func TestExportShare(t *testing.T) {
+	_, clock := setup(t)
+	const marker = "SECRET_MARKER"
+	r := repo(t, t.TempDir(), marker+"-repo")
+	today := *clock
+	run(t, "init", "--product", "iqos", "--pack-price", "6", "--currency", "EUR")
+	at := func(h, m int) { *clock = time.Date(2026, 10, 26, h, m, 0, 0, time.Local) }
+	claude := `{"session_id":"` + marker + `-claude","cwd":` + quote(r) + `}`
+	codex := `{"session_id":"` + marker + `-codex","cwd":` + quote(r) + `}`
+	at(10, 0)
+	runHookInput(t, claude, "claude", "UserPromptSubmit")
+	at(10, 30)
+	run(t, "use")
+	at(11, 0)
+	runHookInput(t, claude, "claude", "Stop")
+	at(11, 10)
+	run(t, "use")
+	at(11, 20)
+	runHookInput(t, claude, "claude", "SessionEnd")
+	at(13, 0)
+	runHookInput(t, codex, "codex", "UserPromptSubmit")
+	at(13, 10)
+	run(t, "use")
+	at(13, 20)
+	runHookInput(t, codex, "codex", "SessionEnd")
+	at(15, 0)
+	run(t, "use")
+	at(16, 0)
+	run(t, "use")
+	run(t, "undo")
+	*clock = today
+	run(t, "use") // today isn't over, so it's left out
+	t.Chdir(r)
+	run(t, "project", "alias", marker+"-alias")
+
+	out, code := run(t, "export", "--share")
+	want := "date,hours_working,hours_waiting,uses_working,uses_waiting,uses_away,nicotine_mg,hours_claude,uses_claude,hours_codex,uses_codex\n" +
+		"2026-10-26,1.33,0.33,2,1,1,2.4,1.33,2,0.33,1\n"
+	if code != 0 || out != want {
+		t.Fatalf("exit %d\n--- got\n%s--- want\n%s", code, out, want)
 	}
 }
 
