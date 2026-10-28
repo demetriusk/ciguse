@@ -1,5 +1,6 @@
 #!/bin/sh
-# Records docs/demo.gif: setup, logging, a two-week report on sample data, the status line.
+# Records docs/demo.gif and docs/demo.mp4: setup, logging, a two-week report on sample data,
+# the status line.
 # Needs vhs and ffmpeg. Run from the repository root: sh docs/demo/record.sh
 set -eu
 
@@ -25,12 +26,20 @@ zoom() {
 	echo "scale=iw*3:ih*3:flags=lanczos,zoompan=z='$z':x='clip($4*3-iw/zoom/2,0,iw-iw/zoom)':y='clip($5*3-ih/zoom/2,0,ih-ih/zoom)':d=1:s=1100x900:fps=25"
 }
 
-ffmpeg -v error -y -i "$work/1.gif" -i "$work/2.gif" -i "$work/3.gif" -i "$work/4.gif" -filter_complex "
+scenes="
 	[0:v]fps=25,format=rgb24[a];
 	[1:v]fps=25,format=rgb24[b];
 	[2:v]fps=25,$(zoom 5.0 10.4 1.6 360 321),format=rgb24[c];
 	[3:v]fps=25,$(zoom 4.7 7.7 2.2 240 115),format=rgb24[d];
-	[a][b][c][d]concat=n=4:v=1:a=0,fps=12,split[s][t];
+	[a][b][c][d]concat=n=4:v=1:a=0"
+
+ffmpeg -v error -y -i "$work/1.gif" -i "$work/2.gif" -i "$work/3.gif" -i "$work/4.gif" -filter_complex "$scenes,fps=12,split[s][t];
 	[s]palettegen=stats_mode=diff:max_colors=64[p];
 	[t][p]paletteuse=dither=none:diff_mode=rectangle" docs/demo.gif
 echo "wrote docs/demo.gif ($(du -h docs/demo.gif | cut -f1))"
+
+# The same cut as video, for X and other sites that take video rather than GIFs: H.264 in
+# yuv420p plays everywhere, at the full 25 fps and colors.
+ffmpeg -v error -y -i "$work/1.gif" -i "$work/2.gif" -i "$work/3.gif" -i "$work/4.gif" -filter_complex "$scenes,format=yuv420p" \
+	-c:v libx264 -crf 18 -preset slow -tune animation -movflags +faststart docs/demo.mp4
+echo "wrote docs/demo.mp4 ($(du -h docs/demo.mp4 | cut -f1))"
