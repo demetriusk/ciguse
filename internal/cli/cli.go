@@ -195,23 +195,29 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, prefix, "nothing logged yet. Log a use with: ciguse use")
 		return 0
 	}
-	fmt.Fprintf(stdout, "%s last %d days · %d uses · %.1f a day\n\n", prefix, *days, r.Uses, float64(r.Uses)/float64(r.Active))
+	// Days before the first use weren't tracked, so they're left out rather than shown as 0.
+	tracked := r.Days[len(r.Days)-r.Active:]
+	span := fmt.Sprintf("%d days", len(tracked))
+	if len(tracked) == 1 {
+		span = "1 day"
+	}
+	fmt.Fprintf(stdout, "%s last %s · %d uses · %.1f a day\n\n", prefix, span, r.Uses, float64(r.Uses)/float64(r.Active))
 	st, err := s.Settings()
 	if err != nil {
 		return fail(stderr, err)
 	}
-	d := r.Days[0].Date
+	d := tracked[0].Date
 	sp, err := s.Split(time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location()).Add(st.DayStart), now())
 	if err != nil {
 		return fail(stderr, err)
 	}
 	printSplit(stdout, sp)
-	for i, d := range r.Days {
+	for i, d := range tracked {
 		line := fmt.Sprintf("%s  %3d", d.Date.Format("Mon 02 Jan"), d.Uses)
 		if d.Uses > 0 {
 			line += "  " + accent.Render(strings.Repeat("▆", min(d.Uses, 40)))
 		}
-		if i == len(r.Days)-1 {
+		if i == len(tracked)-1 {
 			if d.Uses == 0 {
 				line += "  "
 			}

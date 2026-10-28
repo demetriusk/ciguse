@@ -51,7 +51,7 @@ func TestUseRejectsBadInput(t *testing.T) {
 }
 
 func TestInitAndReport(t *testing.T) {
-	dir, _ := setup(t)
+	dir, clock := setup(t)
 
 	expect(t, []string{"report"}, 0, "ciguse · nothing logged yet. Log a use with: ciguse use\n")
 	expect(t, []string{"init", "--product", "iqos", "--pack-price", "6,00", "--currency", "eur"}, 0,
@@ -63,13 +63,24 @@ func TestInitAndReport(t *testing.T) {
 	expect(t, []string{"use"}, 0, "ciguse · iqos logged 12:41 · 1 today\n")
 	expect(t, []string{"use", "cigarette", "--ago", "3h"}, 0, "ciguse · cigarette logged 09:41 · 2 today\n")
 	expect(t, []string{"report", "--days", "3"}, 0,
-		"ciguse · last 3 days · 2 uses · 2.0 a day\n\n"+
+		"ciguse · last 1 day · 2 uses · 2.0 a day\n\n"+
 			"no Claude Code or Codex sessions in this range, so no working vs waiting split.\n"+
 			"the plugins record them: ciguse setup claude, ciguse setup codex\n\n"+
-			"Sun 25 Oct    0\n"+
-			"Mon 26 Oct    0\n"+
 			"Tue 27 Oct    2  ▆▆  today\n\n"+
 			"value  0.30 EUR  (1 of 2 uses priced)\n")
+
+	// Days before the first use weren't tracked, so they're left out; a day without uses after it shows as 0.
+	*clock = clock.AddDate(0, 0, -2)
+	expect(t, []string{"use"}, 0, "ciguse · iqos logged 12:41 · 1 today\n")
+	*clock = clock.AddDate(0, 0, 2)
+	expect(t, []string{"report", "--days", "4"}, 0,
+		"ciguse · last 3 days · 3 uses · 1.0 a day\n\n"+
+			"no Claude Code or Codex sessions in this range, so no working vs waiting split.\n"+
+			"the plugins record them: ciguse setup claude, ciguse setup codex\n\n"+
+			"Sun 25 Oct    1  ▆\n"+
+			"Mon 26 Oct    0\n"+
+			"Tue 27 Oct    2  ▆▆  today\n\n"+
+			"value  0.60 EUR  (2 of 3 uses priced)\n")
 }
 
 func TestInitValidation(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,7 +76,10 @@ func printSplit(w io.Writer, sp store.Split) {
 }
 
 // printGroups prints a breakdown's rows as uses per hour, working and waiting together.
+// Under 0.1 hours, the precision the hours column shows, a rate is noise: such a row gets
+// none, and is left out if it has no uses either.
 func printGroups(w io.Writer, title string, groups []store.Group) {
+	groups = slices.DeleteFunc(slices.Clone(groups), func(g store.Group) bool { return g.Hours < 6*time.Minute && g.Uses == 0 })
 	if len(groups) == 0 {
 		return
 	}
@@ -86,7 +90,7 @@ func printGroups(w io.Writer, title string, groups []store.Group) {
 	fmt.Fprintln(w, title+" "+muted.Render("(per hour, working + waiting)"))
 	for _, g := range groups {
 		rate := "   –"
-		if g.Hours > 0 {
+		if g.Hours >= 6*time.Minute {
 			rate = fmt.Sprintf("%.2f", float64(g.Uses)/g.Hours.Hours())
 		}
 		fmt.Fprintf(w, "  %s  %s · %d uses\n", g.Name+strings.Repeat(" ", width-len(g.Name)), rate, g.Uses)
