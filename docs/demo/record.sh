@@ -39,7 +39,7 @@ ffmpeg -v error -y -i "$work/1.gif" -i "$work/2.gif" -i "$work/3.gif" -i "$work/
 echo "wrote docs/demo.gif ($(du -h docs/demo.gif | cut -f1))"
 
 # The same cut as video, for X and other sites that take video rather than GIFs: H.264 in
-# yuv420p plays everywhere, at the full 25 fps and colors.
+# yuv420p plays everywhere, at the full 25 fps and colors. It stays out of git (.gitignore).
 ffmpeg -v error -y -i "$work/1.gif" -i "$work/2.gif" -i "$work/3.gif" -i "$work/4.gif" -filter_complex "$scenes,format=yuv420p" \
 	-c:v libx264 -crf 18 -preset slow -tune animation -movflags +faststart docs/demo.mp4
 echo "wrote docs/demo.mp4 ($(du -h docs/demo.mp4 | cut -f1))"
