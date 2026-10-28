@@ -41,7 +41,8 @@ func TestReportSplitsWorkingAndWaiting(t *testing.T) {
 		"waiting vs working     2.0×   (95% CI 0.9–4.5)\n" +
 		"early: 24 uses across these states; ~190 for a firm read\n\n" +
 		"by agent (per hour, working + waiting)\n"
-	bars := "\nTue 27 Oct   24  ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆  today\n"
+	bars := "\nTue 27 Oct   24  ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆  today\n\n" +
+		"nicotine  ≈24 mg  (estimate: cigarette 1 mg a use)\n"
 	expect(t, []string{"report", "--days", "1"}, 0, head+"  Claude Code  16.00 · 24 uses\n"+bars)
 
 	// Codex sessions open for a few minutes alongside Claude Code: under 0.1 hours a rate is

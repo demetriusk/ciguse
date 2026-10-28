@@ -71,7 +71,7 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
-	header := []string{"id", "time", "logged_at", "product", "pack_price", "pack_size", "currency", "source", "undone_at"}
+	header := []string{"id", "time", "logged_at", "product", "pack_price", "pack_size", "currency", "source", "undone_at", "nicotine_mg"}
 	c := csv.NewWriter(stdout)
 	if *asCSV {
 		c.Write(header)
@@ -79,12 +79,15 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 	j := json.NewEncoder(stdout)
 	for _, e := range es {
 		row := []string{strconv.FormatInt(e.ID, 10), e.At.Format(time.RFC3339), e.LoggedAt.Format(time.RFC3339),
-			e.Product, "", "", e.Currency.String, e.Source, ""}
+			e.Product, "", "", e.Currency.String, e.Source, "", ""}
 		if e.PackPriceMinor.Valid {
 			row[4], row[5] = formatMinor(e.PackPriceMinor.Int64), strconv.FormatInt(e.PackSize.Int64, 10)
 		}
 		if e.Deleted.Valid {
 			row[8] = e.Deleted.Time.Format(time.RFC3339)
+		}
+		if e.NicotineUG.Valid {
+			row[9] = formatMG(e.NicotineUG.Int64)
 		}
 		if *asCSV {
 			c.Write(row)
@@ -100,6 +103,9 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 		obj["id"], obj["pack_size"] = e.ID, nil
 		if e.PackSize.Valid {
 			obj["pack_size"] = e.PackSize.Int64
+		}
+		if e.NicotineUG.Valid {
+			obj["nicotine_mg"] = float64(e.NicotineUG.Int64) / 1000
 		}
 		j.Encode(obj)
 	}

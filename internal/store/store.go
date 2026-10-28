@@ -2,13 +2,16 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"math/big"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"modernc.org/sqlite"
@@ -83,6 +86,13 @@ INSERT INTO products (id, label) VALUES ('pouch', 'Nicotine pouch');
 ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude';
 UPDATE sessions SET agent = 'codex'
 	WHERE session_key IN (SELECT session_key FROM transitions WHERE cause LIKE 'codex %');
+`, `
+-- Estimated nicotine absorbed per use, in micrograms. Spec section 2 has the sources.
+ALTER TABLE products ADD COLUMN nicotine_ug INTEGER;
+UPDATE products SET nicotine_ug = CASE id
+	WHEN 'cigarette' THEN 1000 WHEN 'iqos' THEN 600 WHEN 'glo' THEN 400 WHEN 'stick' THEN 600 WHEN 'pouch' THEN 800 END;
+ALTER TABLE events ADD COLUMN nicotine_ug INTEGER;
+UPDATE events SET nicotine_ug = (SELECT nicotine_ug FROM products WHERE products.id = events.product_id);
 `}
 
 type Store struct{ db *sql.DB }
@@ -211,10 +221,11 @@ type Product struct {
 	PackPriceMinor sql.NullInt64
 	PackSize       sql.NullInt64
 	Currency       sql.NullString
+	NicotineUG     sql.NullInt64 // estimated nicotine absorbed per use, in micrograms
 }
 
 func (s *Store) Products() ([]Product, error) {
-	rows, err := s.db.Query(`SELECT id, label, pack_price_minor, pack_size, currency FROM products ORDER BY rowid`)
+	rows, err := s.db.Query(`SELECT id, label, pack_price_minor, pack_size, currency, nicotine_ug FROM products ORDER BY rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +233,7 @@ func (s *Store) Products() ([]Product, error) {
 	var ps []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.Label, &p.PackPriceMinor, &p.PackSize, &p.Currency); err != nil {
+		if err := rows.Scan(&p.ID, &p.Label, &p.PackPriceMinor, &p.PackSize, &p.Currency, &p.NicotineUG); err != nil {
 			return nil, err
 		}
 		ps = append(ps, p)
@@ -232,8 +243,8 @@ func (s *Store) Products() ([]Product, error) {
 
 func (s *Store) product(id string) (Product, error) {
 	p := Product{ID: id}
-	err := s.db.QueryRow(`SELECT label, pack_price_minor, pack_size, currency FROM products WHERE id = ?`, id).
-		Scan(&p.Label, &p.PackPriceMinor, &p.PackSize, &p.Currency)
+	err := s.db.QueryRow(`SELECT label, pack_price_minor, pack_size, currency, nicotine_ug FROM products WHERE id = ?`, id).
+		Scan(&p.Label, &p.PackPriceMinor, &p.PackSize, &p.Currency, &p.NicotineUG)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, fmt.Errorf("%w %q", ErrUnknownProduct, id)
 	}
@@ -247,6 +258,15 @@ func (s *Store) SetPrice(id string, packPriceMinor, packSize int64, currency str
 	}
 	_, err := s.db.Exec(`UPDATE products SET pack_price_minor = ?, pack_size = ?, currency = ?, updated_at = ? WHERE id = ?`,
 		packPriceMinor, packSize, currency, now.UnixMilli(), id)
+	return err
+}
+
+// SetNicotine sets a product's estimated nicotine per use. Past events keep the estimate they were logged with.
+func (s *Store) SetNicotine(id string, ug int64) error {
+	if _, err := s.product(id); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE products SET nicotine_ug = ? WHERE id = ?`, ug, id)
 	return err
 }
 
@@ -297,9 +317,9 @@ func (s *Store) Log(u Use) (Logged, error) {
 			}
 		}
 		_, err := c.ExecContext(ctx, `INSERT INTO events
-			(ts, logged_at, utc_offset_min, product_id, pack_price_minor, pack_size, currency, source)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			at, u.Now.UnixMilli(), offset/60, p.ID, p.PackPriceMinor, p.PackSize, p.Currency, u.Source)
+			(ts, logged_at, utc_offset_min, product_id, pack_price_minor, pack_size, currency, source, nicotine_ug)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			at, u.Now.UnixMilli(), offset/60, p.ID, p.PackPriceMinor, p.PackSize, p.Currency, u.Source, p.NicotineUG)
 		return err
 	})
 	if err != nil {
@@ -352,12 +372,20 @@ type Day struct {
 	Uses int
 }
 
+// Dose is how many uses in a report had one product at one nicotine estimate.
+type Dose struct {
+	Product string
+	UG      int64 // estimated nicotine absorbed per use, in micrograms
+	Uses    int
+}
+
 type Report struct {
-	Days   []Day // oldest first, ending today
-	Uses   int
-	Active int                 // days in range on or after the first use ever logged
-	Value  map[string]*big.Rat // currency → total in major units
-	Priced int                 // uses that had a price
+	Days     []Day // oldest first, ending today
+	Uses     int
+	Active   int                 // days in range on or after the first use ever logged
+	Value    map[string]*big.Rat // currency → total in major units
+	Priced   int                 // uses that had a price
+	Nicotine []Dose              // most uses first
 }
 
 // Report summarises the last days local days, today included.
@@ -394,18 +422,20 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 
 	// Offsets differ by at most a day, so a two-day margin catches every event in range.
 	since := now.AddDate(0, 0, -days-2).UnixMilli()
-	rows, err := s.db.Query(`SELECT ts, utc_offset_min, pack_price_minor, pack_size, currency FROM events
+	rows, err := s.db.Query(`SELECT ts, utc_offset_min, pack_price_minor, pack_size, currency, product_id, nicotine_ug FROM events
 		WHERE deleted_at IS NULL AND ts >= ?`, since)
 	if err != nil {
 		return r, err
 	}
 	defer rows.Close()
+	doses := map[Dose]int{}
 	for rows.Next() {
 		var ts int64
 		var offsetMin int
-		var price, size sql.NullInt64
+		var price, size, nicotine sql.NullInt64
 		var currency sql.NullString
-		if err := rows.Scan(&ts, &offsetMin, &price, &size, &currency); err != nil {
+		var product string
+		if err := rows.Scan(&ts, &offsetMin, &price, &size, &currency, &product, &nicotine); err != nil {
 			return r, err
 		}
 		i, ok := index[localDay(eventTime(ts, offsetMin), st.DayStart)]
@@ -421,7 +451,17 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 			r.Value[currency.String].Add(r.Value[currency.String], big.NewRat(price.Int64, size.Int64*100))
 			r.Priced++
 		}
+		if nicotine.Valid {
+			doses[Dose{Product: product, UG: nicotine.Int64}]++
+		}
 	}
+	for d, n := range doses {
+		d.Uses = n
+		r.Nicotine = append(r.Nicotine, d)
+	}
+	slices.SortFunc(r.Nicotine, func(a, b Dose) int {
+		return cmp.Or(b.Uses-a.Uses, strings.Compare(a.Product, b.Product), cmp.Compare(b.UG, a.UG))
+	})
 	return r, rows.Err()
 }
 

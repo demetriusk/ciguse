@@ -25,13 +25,14 @@ type Event struct {
 	PackSize       sql.NullInt64
 	Currency       sql.NullString
 	Source         string
-	Deleted        sql.NullTime // set by undo
+	Deleted        sql.NullTime  // set by undo
+	NicotineUG     sql.NullInt64 // estimated nicotine absorbed, in micrograms
 }
 
 // Events returns every use, undone ones included, oldest first.
 func (s *Store) Events() ([]Event, error) {
 	rows, err := s.db.Query(`SELECT id, ts, logged_at, utc_offset_min, product_id, pack_price_minor, pack_size,
-		currency, source, deleted_at FROM events ORDER BY ts, id`)
+		currency, source, deleted_at, nicotine_ug FROM events ORDER BY ts, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +44,7 @@ func (s *Store) Events() ([]Event, error) {
 		var offset int
 		var deleted sql.NullInt64
 		if err := rows.Scan(&e.ID, &ts, &logged, &offset, &e.Product, &e.PackPriceMinor, &e.PackSize,
-			&e.Currency, &e.Source, &deleted); err != nil {
+			&e.Currency, &e.Source, &deleted, &e.NicotineUG); err != nil {
 			return nil, err
 		}
 		e.At, e.LoggedAt = eventTime(ts, offset), eventTime(logged, offset)

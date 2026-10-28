@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -230,15 +231,38 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		currencies = append(currencies, c)
 	}
 	slices.Sort(currencies)
+	if len(currencies) > 0 || len(r.Nicotine) > 0 {
+		fmt.Fprintln(stdout)
+	}
 	for i, c := range currencies {
-		if i == 0 {
-			fmt.Fprintln(stdout)
-		}
-		fmt.Fprintf(stdout, "%s  %s %s", muted.Render("value"), r.Value[c].FloatString(2), c)
+		fmt.Fprintf(stdout, "%s  %s %s", muted.Render("value   "), r.Value[c].FloatString(2), c)
 		if i == len(currencies)-1 && r.Priced < r.Uses {
 			fmt.Fprint(stdout, muted.Render(fmt.Sprintf("  (%d of %d uses priced)", r.Priced, r.Uses)))
 		}
 		fmt.Fprintln(stdout)
+	}
+	if len(r.Nicotine) > 0 {
+		var ug int64
+		each := make([]string, len(r.Nicotine))
+		for i, d := range r.Nicotine {
+			ug += d.UG * int64(d.Uses)
+			each[i] = d.Product + " " + formatMG(d.UG)
+		}
+		// An estimate: tenths of a mg below 10, whole mg above.
+		total := strconv.FormatInt((ug+500)/1000, 10)
+		if t := (ug + 50) / 100; t < 100 {
+			total = fmt.Sprintf("%d.%d", t/10, t%10)
+		}
+		// A cigarette gives about 1 mg, so mg reads as cigarettes; it would only repeat a cigarette count.
+		like := ""
+		if slices.ContainsFunc(r.Nicotine, func(d store.Dose) bool { return d.Product != "cigarette" }) {
+			like = ", like " + total + " cigarettes"
+			if total == "1" {
+				like = ", like 1 cigarette"
+			}
+		}
+		fmt.Fprintf(stdout, "%s  ≈%s mg%s  %s\n", muted.Render("nicotine"), total, like,
+			muted.Render("(estimate: "+strings.Join(each, ", ")+" mg a use)"))
 	}
 	return 0
 }
@@ -249,6 +273,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	price := fs.String("pack-price", "", "pack price, e.g. 5.00 (applies to --product, or the default product)")
 	size := fs.Int("pack-size", 20, "units per pack or can")
 	currency := fs.String("currency", "", "currency code for --pack-price, e.g. EUR")
+	nicotine := fs.String("nicotine", "", "estimated mg of nicotine a use, e.g. 0.6 (applies to --product, or the default product)")
 	dayStart := fs.String("day-start", "", "local time a new day starts, e.g. 04:00")
 	if _, ok := parse(fs, args, 0); !ok {
 		return 2
@@ -288,6 +313,13 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
+	var nicotineUG int64
+	if *nicotine != "" {
+		if nicotineUG, err = parseMG(*nicotine); err != nil {
+			fmt.Fprintf(stderr, "ciguse: --nicotine: %v\n", err)
+			return 2
+		}
+	}
 	if *dayStart != "" {
 		if dayStartDur, err = parseClock(*dayStart); err != nil {
 			fmt.Fprintf(stderr, "ciguse: --day-start: %v\n", err)
@@ -306,16 +338,21 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			return fail(stderr, err)
 		}
 	}
-	if *price != "" {
-		target := *product
-		if target == "" {
-			st, err := s.Settings()
-			if err != nil {
-				return fail(stderr, err)
-			}
-			target = st.DefaultProduct
+	target := *product
+	if target == "" && (*price != "" || *nicotine != "") {
+		st, err := s.Settings()
+		if err != nil {
+			return fail(stderr, err)
 		}
+		target = st.DefaultProduct
+	}
+	if *price != "" {
 		if err := s.SetPrice(target, priceMinor, int64(*size), strings.ToUpper(*currency), now()); err != nil {
+			return fail(stderr, err)
+		}
+	}
+	if *nicotine != "" {
+		if err := s.SetNicotine(target, nicotineUG); err != nil {
 			return fail(stderr, err)
 		}
 	}
@@ -349,6 +386,15 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	if !priced {
 		fmt.Fprintf(stdout, "  %s       not set %s\n", muted.Render("price"), muted.Render("(optional: --pack-price 5.00 --currency EUR)"))
+	}
+	for _, p := range products {
+		if p.ID == st.DefaultProduct && p.NicotineUG.Valid {
+			hint := "(--nicotine to change)"
+			if p.ID != "cigarette" {
+				hint = "(a cigarette ≈1 mg; --nicotine to change)"
+			}
+			fmt.Fprintf(stdout, "  %s    %s ≈%s mg a use %s\n", muted.Render("nicotine"), p.ID, formatMG(p.NicotineUG.Int64), muted.Render(hint))
+		}
 	}
 	fmt.Fprintf(stdout, "  %s  %02d:%02d\n", muted.Render("day starts"), int(st.DayStart.Hours()), int(st.DayStart.Minutes())%60)
 	dir, _ := dataDir()
@@ -463,6 +509,19 @@ func parseMoney(s string) (int64, error) {
 
 func formatMinor(v int64) string {
 	return fmt.Sprintf("%d.%02d", v/100, v%100)
+}
+
+// parseMG turns "0.6" or "0,6" mg into micrograms.
+func parseMG(s string) (int64, error) {
+	f, err := strconv.ParseFloat(strings.Replace(strings.TrimSpace(s), ",", ".", 1), 64)
+	if err != nil || !(f >= 0 && f <= 50) {
+		return 0, fmt.Errorf("%q is not mg a use from 0 to 50, like 0.6", s)
+	}
+	return int64(math.Round(f * 1000)), nil
+}
+
+func formatMG(ug int64) string {
+	return strconv.FormatFloat(float64(ug)/1000, 'f', -1, 64)
 }
 
 // parseClock turns "04:00" into the duration since midnight.

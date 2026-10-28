@@ -46,12 +46,12 @@ func TestExport(t *testing.T) {
 
 	out, code := run(t, "export", "--csv")
 	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if code != 0 || len(lines) != 3 || lines[0] != "id,time,logged_at,product,pack_price,pack_size,currency,source,undone_at" ||
-		!strings.Contains(lines[1], ",iqos,6.00,20,EUR,cli,") || !strings.HasSuffix(lines[2], ",pouch,,,,cli,"+clock.Format("2006-01-02T15:04:05Z07:00")) {
+	if code != 0 || len(lines) != 3 || lines[0] != "id,time,logged_at,product,pack_price,pack_size,currency,source,undone_at,nicotine_mg" ||
+		!strings.HasSuffix(lines[1], ",iqos,6.00,20,EUR,cli,,0.6") || !strings.HasSuffix(lines[2], ",pouch,,,,cli,"+clock.Format("2006-01-02T15:04:05Z07:00")+",0.8") {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 	out, _ = run(t, "export")
-	if !strings.Contains(out, `"pack_price":"6.00","pack_size":20,"product":"iqos","source":"cli","time":`) ||
+	if !strings.Contains(out, `"nicotine_mg":0.6,"pack_price":"6.00","pack_size":20,"product":"iqos","source":"cli","time":`) ||
 		!strings.Contains(out, `"pack_price":null,"pack_size":null,"product":"pouch"`) {
 		t.Fatalf("json:\n%s", out)
 	}

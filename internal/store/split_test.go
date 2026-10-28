@@ -140,7 +140,8 @@ func TestMigrationBackfillsCodexSessions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.db.Exec(`ALTER TABLE sessions DROP COLUMN agent; PRAGMA user_version = 3`); err != nil {
+	if _, err := s.db.Exec(`ALTER TABLE sessions DROP COLUMN agent; ALTER TABLE events DROP COLUMN nicotine_ug;
+		ALTER TABLE products DROP COLUMN nicotine_ug; PRAGMA user_version = 3`); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()

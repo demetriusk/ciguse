@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -121,6 +122,64 @@ func TestUnpricedUsesAreNotZero(t *testing.T) {
 	}
 	if len(r.Value) != 0 || r.Priced != 0 || r.Uses != 1 {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestNicotineSnapshotSurvivesChange(t *testing.T) {
+	s := open(t)
+	logAt(t, s, base.Add(-24*time.Hour)) // a cigarette at the built-in estimate
+	iqos := func(at time.Time) {
+		t.Helper()
+		if _, err := s.Log(Use{Product: "iqos", At: at, Now: at, Source: "cli"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	iqos(base)
+	iqos(base.Add(time.Hour))
+	if err := s.SetNicotine("iqos", 500); err != nil {
+		t.Fatal(err)
+	}
+	iqos(base.Add(2 * time.Hour))
+	if err := s.SetNicotine("vape", 500); !errors.Is(err, ErrUnknownProduct) {
+		t.Fatalf("got %v", err)
+	}
+
+	r, err := s.Report(base.Add(3*time.Hour), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Dose{{"iqos", 600, 2}, {"cigarette", 1000, 1}, {"iqos", 500, 1}}; !slices.Equal(r.Nicotine, want) {
+		t.Fatalf("got %+v, want %+v", r.Nicotine, want)
+	}
+}
+
+// Uses logged before nicotine estimates existed get their product's estimate.
+func TestMigrationBackfillsNicotine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ciguse.db")
+	s, err := Open(path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Log(Use{Product: "pouch", At: base, Now: base, Source: "cli"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE events DROP COLUMN nicotine_ug; ALTER TABLE products DROP COLUMN nicotine_ug;
+		PRAGMA user_version = 4`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	s, err = Open(path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	r, err := s.Report(base, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Dose{{"pouch", 800, 1}}; !slices.Equal(r.Nicotine, want) {
+		t.Fatalf("got %+v", r.Nicotine)
 	}
 }
 

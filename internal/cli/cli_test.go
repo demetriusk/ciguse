@@ -58,6 +58,7 @@ func TestInitAndReport(t *testing.T) {
 		"ciguse · ready\n"+
 			"  default     iqos\n"+
 			"  price       iqos 6.00 EUR / 20\n"+
+			"  nicotine    iqos ≈0.6 mg a use (a cigarette ≈1 mg; --nicotine to change)\n"+
 			"  day starts  04:00\n"+
 			"  data        "+tildePath(filepath.Join(dir, "ciguse.db"))+"\n")
 	expect(t, []string{"use"}, 0, "ciguse · iqos logged 12:41 · 1 today\n")
@@ -67,7 +68,8 @@ func TestInitAndReport(t *testing.T) {
 			"no Claude Code or Codex sessions in this range, so no working vs waiting split.\n"+
 			"the plugins record them: ciguse setup claude, ciguse setup codex\n\n"+
 			"Tue 27 Oct    2  ▆▆  today\n\n"+
-			"value  0.30 EUR  (1 of 2 uses priced)\n")
+			"value     0.30 EUR  (1 of 2 uses priced)\n"+
+			"nicotine  ≈1.6 mg, like 1.6 cigarettes  (estimate: cigarette 1, iqos 0.6 mg a use)\n")
 
 	// Days before the first use weren't tracked, so they're left out; a day without uses after it shows as 0.
 	*clock = clock.AddDate(0, 0, -2)
@@ -80,7 +82,8 @@ func TestInitAndReport(t *testing.T) {
 			"Sun 25 Oct    1  ▆\n"+
 			"Mon 26 Oct    0\n"+
 			"Tue 27 Oct    2  ▆▆  today\n\n"+
-			"value  0.60 EUR  (2 of 3 uses priced)\n")
+			"value     0.60 EUR  (2 of 3 uses priced)\n"+
+			"nicotine  ≈2.2 mg, like 2.2 cigarettes  (estimate: iqos 0.6, cigarette 1 mg a use)\n")
 }
 
 func TestInitValidation(t *testing.T) {
@@ -88,6 +91,16 @@ func TestInitValidation(t *testing.T) {
 	expect(t, []string{"init", "--pack-price", "5.00"}, 2, "ciguse: --pack-price needs --currency, a 3-letter code such as EUR\n")
 	expect(t, []string{"init", "--pack-price", "five", "--currency", "EUR"}, 2, "ciguse: --pack-price: \"five\" is not a price like 5.00\n")
 	expect(t, []string{"init", "--day-start", "25:00"}, 2, "ciguse: --day-start: \"25:00\" is not a time like 04:00\n")
+	expect(t, []string{"init", "--nicotine", "60"}, 2, "ciguse: --nicotine: \"60\" is not mg a use from 0 to 50, like 0.6\n")
+}
+
+func TestNicotineOverride(t *testing.T) {
+	setup(t)
+	out, _ := run(t, "init", "--product", "pouch", "--nicotine", "0,45")
+	contains(t, out, "nicotine    pouch ≈0.45 mg a use (a cigarette ≈1 mg; --nicotine to change)")
+	run(t, "use")
+	out, _ = run(t, "report")
+	contains(t, out, "\nnicotine  ≈0.5 mg, like 0.5 cigarettes  (estimate: pouch 0.45 mg a use)\n")
 }
 
 func TestParseMoney(t *testing.T) {
