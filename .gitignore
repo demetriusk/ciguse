@@ -3,3 +3,8 @@
 /dist/
 .DS_Store
 /docs/demo.mp4
+
+# Internal specs, notes and research stay local; the README is the only public doc.
+*.md
+!/README.md
+*.pdf
