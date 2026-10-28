@@ -87,7 +87,11 @@ ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude';
 UPDATE sessions SET agent = 'codex'
 	WHERE session_key IN (SELECT session_key FROM transitions WHERE cause LIKE 'codex %');
 `, `
--- Estimated nicotine absorbed per use, in micrograms. Spec section 2 has the sources.
+-- Estimated nicotine absorbed per use, in micrograms. A cigarette gives about 1 mg (Benowitz &
+-- Jacob 1984); the rest scale by plasma nicotine AUC against cigarettes in the same people:
+-- IQOS 0.61 (PMI, NCT05789420), glo 0.3-0.5 (BAT, doi:10.1007/s13318-024-00921-4), a 5.8-10.1 mg
+-- pouch 0.62-0.94 (Chapman 2022, PMC9217727). Other sticks: Ploom X machine yield, 0.58 of
+-- cigarettes (Japan MHLW-funded study, 2025).
 ALTER TABLE products ADD COLUMN nicotine_ug INTEGER;
 UPDATE products SET nicotine_ug = CASE id
 	WHEN 'cigarette' THEN 1000 WHEN 'iqos' THEN 600 WHEN 'glo' THEN 400 WHEN 'stick' THEN 600 WHEN 'pouch' THEN 800 END;
