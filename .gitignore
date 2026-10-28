@@ -8,3 +8,5 @@
 *.md
 !/README.md
 *.pdf
+# Pooled data from the data thread (go run ./scripts/pool).
+*.csv
