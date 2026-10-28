@@ -68,7 +68,7 @@ func TestInitAndReport(t *testing.T) {
 			"the plugins record them: ciguse setup claude, ciguse setup codex\n\n"+
 			"Sun 25 Oct    0\n"+
 			"Mon 26 Oct    0\n"+
-			"Tue 27 Oct    2  ██  today\n\n"+
+			"Tue 27 Oct    2  ▆▆  today\n\n"+
 			"value  0.30 EUR  (1 of 2 uses priced)\n")
 }
 

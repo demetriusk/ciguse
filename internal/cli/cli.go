@@ -209,7 +209,7 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	for i, d := range r.Days {
 		line := fmt.Sprintf("%s  %3d", d.Date.Format("Mon 02 Jan"), d.Uses)
 		if d.Uses > 0 {
-			line += "  " + accent.Render(strings.Repeat("█", min(d.Uses, 40)))
+			line += "  " + accent.Render(strings.Repeat("▆", min(d.Uses, 40)))
 		}
 		if i == len(r.Days)-1 {
 			if d.Uses == 0 {

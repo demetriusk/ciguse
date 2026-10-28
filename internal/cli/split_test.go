@@ -42,5 +42,5 @@ func TestReportSplitsWorkingAndWaiting(t *testing.T) {
 		"early: 24 uses across these states; ~190 for a firm read\n\n"+
 		"by agent (per hour, working + waiting)\n"+
 		"  Claude Code  16.00 · 24 uses\n\n"+
-		"Tue 27 Oct   24  ████████████████████████  today\n")
+		"Tue 27 Oct   24  ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆  today\n")
 }
