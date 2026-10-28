@@ -50,6 +50,7 @@ After a week or two, run `ciguse report` to see working vs waiting.
 | `ciguse use --ago 10m` | log one you forgot |
 | `ciguse undo` | remove your last log from the past 24 hours |
 | `ciguse report` | the last 14 days: working vs waiting, by agent, then uses per day |
+| `ciguse report --brief` | the answer in five lines, to screenshot or paste |
 | `ciguse doctor` | something looks off? start here |
 
 Run `ciguse` for everything else: `export --csv`, `share`, `project alias`, `purge`, `setup claude --remove`.
@@ -62,7 +63,7 @@ Run `ciguse` for everything else: `export --csv`, `share`, `project alias`, `pur
 - **One report for both agents.** Uses in Claude Code and Codex count together, then a by-agent breakdown shows each one's share. Uses logged outside any agent session show there as *no agent / away*.
 - **With several sessions open,** in Claude Code, Codex or both, time counts as waiting whenever any of them waits on you, and as working only while all of them work. A wait longer than 30 minutes counts as away.
 - **Nicotine in the report is an estimate** of what your body takes in a day. A cigarette gives about 1 mg, so 20 mg is a pack a day's worth. Per use: 1 mg a cigarette, 0.6 an IQOS or other stick, 0.4 a glo, 0.8 a pouch (6–10 mg on the can). It compares nicotine only, not harm. After two full weeks, it also compares the last 7 days with the 7 before. The figures come from blood-level studies comparing each product with cigarettes. Set your own with `ciguse init --nicotine 0.5` (for your default product, or add `--product pouch`).
-- **The ratio needs data:** at least 10 uses while working and 10 while waiting. Until about 95 each, the report marks it early.
+- **The ratio needs data:** at least 10 uses while working and 10 while waiting. The report shows how far along you are, and after your first week the status line says `ratio ready` once there's one to see. Until about 95 uses each, the report marks it early.
 - **Your status line is safe.** `ciguse setup claude` changes only `statusLine` in `~/.claude/settings.json` and keeps a backup. If you had a status line, it keeps running, with the ciguse count after it. `ciguse setup claude --remove` puts it back.
 - **After your first week** you can add `--since` (time since your last use) or `--ratio` to the `ciguse statusline` command in that file.
 

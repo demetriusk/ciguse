@@ -8,12 +8,16 @@ import (
 	"github.com/demetriusk/ciguse/internal/store"
 )
 
-func TestReportSplitsWorkingAndWaiting(t *testing.T) {
-	dir, clock := setup(t)
+// seedSession records a Claude Code session on 27 Oct that works 10:00–11:00 and waits on
+// the user 11:00–11:30, with working uses every 5 minutes from 10:00 and waiting uses every
+// 2 minutes from 11:00.
+func seedSession(t *testing.T, dir string, working, waiting int) {
+	t.Helper()
 	s, err := store.Open(filepath.Join(dir, "ciguse.db"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	at := func(h, m int) time.Time { return time.Date(2026, 10, 27, h, m, 0, 0, time.Local) }
 	for _, e := range []store.AgentEvent{
 		{At: at(10, 0), State: store.Working}, {At: at(11, 0), State: store.WaitingOnYou}, {At: at(11, 30), State: store.Ended},
@@ -23,15 +27,24 @@ func TestReportSplitsWorkingAndWaiting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for i := range 12 {
-		for _, ts := range []time.Time{at(10, i*5), at(11, i*2)} {
-			if _, err := s.Log(store.Use{At: ts, Now: ts, Source: "cli", Force: true}); err != nil {
-				t.Fatal(err)
-			}
+	var uses []time.Time
+	for i := range working {
+		uses = append(uses, at(10, i*5))
+	}
+	for i := range waiting {
+		uses = append(uses, at(11, i*2))
+	}
+	for _, ts := range uses {
+		if _, err := s.Log(store.Use{At: ts, Now: ts, Source: "cli", Force: true}); err != nil {
+			t.Fatal(err)
 		}
 	}
-	s.Close()
-	*clock = at(12, 41)
+}
+
+func TestReportSplitsWorkingAndWaiting(t *testing.T) {
+	dir, _ := setup(t)
+	seedSession(t, dir, 12, 12)
+	at := func(h, m int) time.Time { return time.Date(2026, 10, 27, h, m, 0, 0, time.Local) }
 
 	head := "ciguse · last 1 day · 24 uses · 24.0 a day\n\n" +
 		"                      hours   uses   per hour\n" +
@@ -65,4 +78,42 @@ func TestReportSplitsWorkingAndWaiting(t *testing.T) {
 	expect(t, []string{"report", "--days", "1"}, 0, head+"  Claude Code  16.36 · 24 uses\n"+bars)
 	codex("c2", at(11, 10), at(11, 13)) // the uses at 11:10 and 11:12
 	expect(t, []string{"report", "--days", "1"}, 0, head+"  Claude Code  15.53 · 22 uses\n  both open       – · 2 uses\n"+bars)
+}
+
+func TestReportBrief(t *testing.T) {
+	dir, _ := setup(t)
+	seedSession(t, dir, 3, 12)
+	early := "waiting vs working   too early: 3 of 10 while working\n"
+	out, _ := run(t, "report", "--days", "1")
+	contains(t, out, "\n"+early+"\n")
+	expect(t, []string{"report", "--brief"}, 0, "ciguse · last 1 day · 15 uses · 15.0 a day\n"+
+		"agent working        3.00 an hour\n"+
+		"waiting on you       24.00 an hour\n"+
+		early+
+		"nicotine             ≈15 mg a day\n")
+
+	seedSession(t, dir, 9, 0) // 12 while working now
+	expect(t, []string{"report", "--brief"}, 0, "ciguse · last 1 day · 24 uses · 24.0 a day\n"+
+		"agent working        12.00 an hour\n"+
+		"waiting on you       24.00 an hour\n"+
+		"waiting vs working   2.0×  (95% CI 0.9–4.5)\n"+
+		"nicotine             ≈24 mg a day\n")
+}
+
+// Once the first week is over and both states have enough uses, the status line says the
+// ratio is ready until a report has shown it. --ratio shows the ratio itself instead.
+func TestStatuslineRatioReady(t *testing.T) {
+	dir, clock := setup(t)
+	t.Setenv("NO_COLOR", "1")
+	today := *clock
+	*clock = today.AddDate(0, 0, -8)
+	run(t, "use")
+	*clock = today
+	seedSession(t, dir, 12, 3)
+	expect(t, []string{"statusline"}, 0, "ciguse · 15 today\n")
+	seedSession(t, dir, 0, 9)
+	expect(t, []string{"statusline"}, 0, "ciguse · 24 today · ratio ready: ciguse report\n")
+	expect(t, []string{"statusline", "--ratio"}, 0, "ciguse · 24 today · waiting 2.0× working\n")
+	run(t, "report")
+	expect(t, []string{"statusline"}, 0, "ciguse · 24 today\n")
 }

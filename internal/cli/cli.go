@@ -178,6 +178,7 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 func runReport(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("report", stderr)
 	days := fs.Int("days", 14, "number of days, today included")
+	brief := fs.Bool("brief", false, "a few lines to screenshot or paste: the split and nicotine")
 	if _, ok := parse(fs, args, 0); !ok {
 		return 2
 	}
@@ -205,7 +206,10 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	if len(tracked) == 1 {
 		span = "1 day"
 	}
-	fmt.Fprintf(stdout, "%s last %s · %d uses · %.1f a day\n\n", prefix, span, r.Uses, float64(r.Uses)/float64(r.Active))
+	fmt.Fprintf(stdout, "%s last %s · %d uses · %.1f a day\n", prefix, span, r.Uses, float64(r.Uses)/float64(r.Active))
+	if !*brief {
+		fmt.Fprintln(stdout)
+	}
 	st, err := s.Settings()
 	if err != nil {
 		return fail(stderr, err)
@@ -214,6 +218,18 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	sp, err := s.Split(time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location()).Add(st.DayStart), now())
 	if err != nil {
 		return fail(stderr, err)
+	}
+	if _, _, _, ok := rateRatio(sp); ok {
+		if err := s.SetConfig(cfgRatioSeen, "1"); err != nil { // the status line stops pointing here
+			return fail(stderr, err)
+		}
+	}
+	if *brief {
+		printBrief(stdout, sp)
+		if len(r.Nicotine) > 0 {
+			fmt.Fprintf(stdout, "%s   %s\n", muted.Render(fmt.Sprintf("%-18s", "nicotine")), nicotineADay(r))
+		}
+		return 0
 	}
 	printSplit(stdout, sp)
 	for i, d := range tracked {
@@ -245,22 +261,11 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout)
 	}
 	if len(r.Nicotine) > 0 {
-		var ug int64
 		each := make([]string, len(r.Nicotine))
 		for i, d := range r.Nicotine {
-			ug += d.UG * int64(d.Uses)
 			each[i] = d.Product + " " + formatMG(d.UG)
 		}
-		day := roughMG(ug / int64(r.Active))
-		// A cigarette gives about 1 mg, so mg reads as cigarettes; it would only repeat a cigarette count.
-		like := ""
-		if slices.ContainsFunc(r.Nicotine, func(d store.Dose) bool { return d.Product != "cigarette" }) {
-			like = ", like " + day + " cigarettes"
-			if day == "1" {
-				like = ", like 1 cigarette"
-			}
-		}
-		fmt.Fprintf(stdout, "%s  ≈%s mg a day%s\n", muted.Render("nicotine"), day, like)
+		fmt.Fprintf(stdout, "%s  %s\n", muted.Render("nicotine"), nicotineADay(r))
 		if r.WeeksTracked {
 			fmt.Fprintln(stdout, muted.Render(fmt.Sprintf("          last 7 full days ≈%s mg a day · the 7 before ≈%s",
 				roughMG(r.Weeks[0]/7), roughMG(r.Weeks[1]/7))))
@@ -525,6 +530,23 @@ func parseMG(s string) (int64, error) {
 
 func formatMG(ug int64) string {
 	return strconv.FormatFloat(float64(ug)/1000, 'f', -1, 64)
+}
+
+// nicotineADay is the report's estimated nicotine a day, "≈7 mg a day, like 7 cigarettes".
+func nicotineADay(r store.Report) string {
+	var ug int64
+	for _, d := range r.Nicotine {
+		ug += d.UG * int64(d.Uses)
+	}
+	day := roughMG(ug / int64(r.Active))
+	// A cigarette gives about 1 mg, so mg reads as cigarettes; it would only repeat a cigarette count.
+	if !slices.ContainsFunc(r.Nicotine, func(d store.Dose) bool { return d.Product != "cigarette" }) {
+		return "≈" + day + " mg a day"
+	}
+	if day == "1" {
+		return "≈1 mg a day, like 1 cigarette"
+	}
+	return "≈" + day + " mg a day, like " + day + " cigarettes"
 }
 
 // roughMG rounds an estimate in micrograms: tenths of a mg below 10, whole mg above, and

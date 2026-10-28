@@ -21,10 +21,12 @@ import (
 	"github.com/demetriusk/ciguse/internal/store"
 )
 
-// Config keys for the status line ciguse wrapped and the settings file it wrote.
+// Config keys for the status line ciguse wrapped and the settings file it wrote, and for
+// whether a report has shown a waiting vs working ratio yet.
 const (
-	cfgWrapped = "statusline_wrapped"
-	cfgWritten = "statusline_written_sha256"
+	cfgWrapped   = "statusline_wrapped"
+	cfgWritten   = "statusline_written_sha256"
+	cfgRatioSeen = "ratio_seen"
 )
 
 // runStatusline prints the ciguse segment for Claude Code's status line. It runs every few
@@ -73,14 +75,20 @@ func runStatusline(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// segment is "ciguse · 5 today", plus the opt-in parts once the first week is over.
+// segment is "ciguse · 5 today", plus the opt-in parts once the first week is over, and a
+// pointer to the report the first time it has a ratio to show.
 func segment(s *store.Store, t time.Time, since, ratio bool) (string, error) {
 	n, err := s.Today(t)
 	if err != nil {
 		return "", err
 	}
 	parts := []string{prefix + " " + bold.Render(fmt.Sprintf("%d today", n))}
-	if since || ratio {
+	seen, err := s.Config(cfgRatioSeen)
+	if err != nil {
+		return "", err
+	}
+	ready := !ratio && seen == ""
+	if since || ratio || ready {
 		first, last, ok, err := s.Span()
 		if err != nil {
 			return "", err
@@ -90,13 +98,15 @@ func segment(s *store.Store, t time.Time, since, ratio bool) (string, error) {
 			if since {
 				parts = append(parts, ago(t.Sub(last))+" since last")
 			}
-			if ratio {
+			if ratio || ready {
 				sp, err := s.Split(t.AddDate(0, 0, -14), t)
 				if err != nil {
 					return "", err
 				}
-				if rr, _, _, ok := rateRatio(sp); ok {
+				if rr, _, _, ok := rateRatio(sp); ok && ratio {
 					parts = append(parts, fmt.Sprintf("waiting %.1f× working", rr))
+				} else if ok {
+					parts = append(parts, "ratio ready: "+accent.Render("ciguse report"))
 				}
 			}
 		}

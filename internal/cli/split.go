@@ -30,6 +30,40 @@ func rateRatio(sp store.Split) (rr, lo, hi float64, ok bool) {
 	return rr, rr * math.Exp(-1.96*se), rr * math.Exp(1.96*se), true
 }
 
+// tooEarlyText says how far each state is from the tooEarly guard.
+func tooEarlyText(sp store.Split) string {
+	var short []string
+	for _, st := range []struct{ name, key string }{{"working", store.Working}, {"waiting", store.WaitingOnYou}} {
+		if n := sp.Uses[st.key]; n < tooEarly {
+			short = append(short, fmt.Sprintf("%d of %d while %s", n, tooEarly, st.name))
+		}
+	}
+	return "too early: " + strings.Join(short, ", ")
+}
+
+// printBrief prints the split in a few lines to screenshot or paste: each state's rate and
+// the ratio, or how far it is from one.
+func printBrief(w io.Writer, sp store.Split) {
+	if sp.Sessions == 0 {
+		fmt.Fprintln(w, muted.Render("no Claude Code or Codex sessions yet, so no working vs waiting split"))
+		return
+	}
+	rate := func(label, key string) {
+		v := "–"
+		if h := sp.Hours[key]; h > 0 {
+			v = fmt.Sprintf("%.2f an hour", float64(sp.Uses[key])/h.Hours())
+		}
+		fmt.Fprintf(w, "%-18s   %s\n", label, v)
+	}
+	rate("agent working", store.Working)
+	rate("waiting on you", store.WaitingOnYou)
+	if rr, lo, hi, ok := rateRatio(sp); ok {
+		fmt.Fprintf(w, "%-18s   %s  %s\n", "waiting vs working", bold.Render(fmt.Sprintf("%.1f×", rr)), muted.Render(fmt.Sprintf("(95%% CI %.1f–%.1f)", lo, hi)))
+	} else {
+		fmt.Fprintf(w, "%-18s   %s\n", "waiting vs working", muted.Render(tooEarlyText(sp)))
+	}
+}
+
 // printSplit prints the report's answer: uses per hour while Claude Code works versus
 // while it waits on the user.
 func printSplit(w io.Writer, sp store.Split) {
@@ -54,7 +88,7 @@ func printSplit(w io.Writer, sp store.Split) {
 	fmt.Fprintln(w)
 
 	if rr, lo, hi, ok := rateRatio(sp); !ok {
-		fmt.Fprintf(w, "%-18s   %s\n\n", "waiting vs working", muted.Render(fmt.Sprintf("too early: needs %d uses in each state", tooEarly)))
+		fmt.Fprintf(w, "%-18s   %s\n\n", "waiting vs working", muted.Render(tooEarlyText(sp)))
 	} else {
 		fmt.Fprintf(w, "%-18s %s   %s\n", "waiting vs working", bold.Render(fmt.Sprintf("%8s", fmt.Sprintf("%.1f×", rr))),
 			muted.Render(fmt.Sprintf("(95%% CI %.1f–%.1f)", lo, hi)))
