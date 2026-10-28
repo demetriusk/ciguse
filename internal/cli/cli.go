@@ -149,7 +149,13 @@ func runUse(args []string, source string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s already logged one at %s, skipped %s\n", prefix, l.Previous.Format("15:04"), muted.Render("(--force logs anyway)"))
 		return 0
 	}
-	fmt.Fprintf(stdout, "%s %s logged %s · %s\n", prefix, bold.Render(l.Product), l.At.Format("15:04"), bold.Render(fmt.Sprintf("%d today", l.Today)))
+	line := fmt.Sprintf("%s %s logged %s · %s", prefix, bold.Render(l.Product), l.At.Format("15:04"), bold.Render(fmt.Sprintf("%d today", l.Today)))
+	// Codex and the hotkey have no ciguse status line, so the confirmation points at the
+	// report too. The use is saved either way, so a failed check only skips the pointer.
+	if ready, err := ratioReady(s, t); err == nil && ready {
+		line += muted.Render(" · ") + ratioReadyText
+	}
+	fmt.Fprintln(stdout, line)
 	return 0
 }
 
@@ -219,7 +225,8 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
-	if _, _, _, ok := rateRatio(sp); ok {
+	_, _, _, ratioOK := rateRatio(sp)
+	if ratioOK {
 		if err := s.SetConfig(cfgRatioSeen, "1"); err != nil { // the status line stops pointing here
 			return fail(stderr, err)
 		}
@@ -271,6 +278,12 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 				roughMG(r.Weeks[0]/7), roughMG(r.Weeks[1]/7))))
 		}
 		fmt.Fprintln(stdout, muted.Render("          estimate: "+strings.Join(each, ", ")+" mg a use · a pack a day ≈ 20 mg"))
+	}
+	// Two weeks of data is what the data thread asks for, so point there until the user shares.
+	if first, _, ok, err := s.Span(); err == nil && ok && ratioOK && now().Sub(first) >= 14*24*time.Hour {
+		if shared, err := s.Config(cfgShared); err == nil && shared == "" {
+			fmt.Fprintf(stdout, "\n%s%s%s\n", muted.Render("two weeks in: "), accent.Render("ciguse share"), muted.Render(" adds your day totals to the data thread"))
+		}
 	}
 	return 0
 }

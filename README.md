@@ -95,6 +95,22 @@ irm https://raw.githubusercontent.com/demetriusk/ciguse/main/install.ps1 | iex
 
 **For scripts,** `ciguse init` takes flags instead of asking: `ciguse init --product iqos --pack-price 6.00 --currency EUR --pack-size 20 --nicotine 0.6 --day-start 04:00`.
 
+## Uninstall
+
+Run these in order, skipping the lines for an agent you never set up:
+
+```sh
+ciguse setup claude --remove              # puts your own status line back
+claude plugin uninstall ciguse@ciguse
+claude plugin marketplace remove ciguse
+ciguse setup codex --remove               # removes the Codex plugin
+codex plugin marketplace remove ciguse
+ciguse purge                              # deletes all your data, asks first
+brew uninstall --cask ciguse
+```
+
+Installed with the script? Delete `~/.local/bin/ciguse` (Windows: the `%LOCALAPPDATA%\Programs\ciguse` folder) instead of the last line. If you set up a hotkey, remove it in the app you made it with.
+
 ## Privacy and data
 
 The plugins store, per agent session: a keyed session id, a keyed project path, the repository's folder name, and when the state changed. Prompts, tool input, file paths and transcripts are never stored. A `cig` prompt is checked in memory and dropped.

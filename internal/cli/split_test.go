@@ -114,6 +114,10 @@ func TestStatuslineRatioReady(t *testing.T) {
 	seedSession(t, dir, 0, 9)
 	expect(t, []string{"statusline"}, 0, "ciguse · 24 today · ratio ready: ciguse report\n")
 	expect(t, []string{"statusline", "--ratio"}, 0, "ciguse · 24 today · waiting 2.0× working\n")
+	// Codex and the hotkey have no ciguse status line, so a logged use says it too.
+	expect(t, []string{"use"}, 0, "ciguse · cigarette logged 12:41 · 25 today · ratio ready: ciguse report\n")
 	run(t, "report")
-	expect(t, []string{"statusline"}, 0, "ciguse · 24 today\n")
+	expect(t, []string{"statusline"}, 0, "ciguse · 25 today\n")
+	*clock = today.Add(2 * time.Minute)
+	expect(t, []string{"use"}, 0, "ciguse · cigarette logged 12:43 · 26 today\n")
 }

@@ -94,3 +94,30 @@ func TestShare(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 }
+
+// Two weeks in, with a ratio, the report points at ciguse share until the user has shared.
+func TestReportSharePrompt(t *testing.T) {
+	dir, clock := setup(t)
+	today := *clock
+	seedSession(t, dir, 12, 12)
+	prompt := "\n\ntwo weeks in: ciguse share adds your day totals to the data thread\n"
+	if out, _ := run(t, "report"); strings.Contains(out, "two weeks in") {
+		t.Fatalf("first use today:\n%s", out)
+	}
+	*clock = today.AddDate(0, 0, -14)
+	run(t, "use")
+	*clock = today
+	if out, _ := run(t, "report"); !strings.HasSuffix(out, prompt) {
+		t.Fatalf("two weeks in, no prompt:\n%s", out)
+	}
+	if out, _ := run(t, "report", "--brief"); strings.Contains(out, "two weeks in") {
+		t.Fatalf("brief is for screenshots:\n%s", out)
+	}
+	fakeGH(t, true, "")
+	if out, code := ask(t, "y\n", "share"); code != 0 {
+		t.Fatalf("share: exit %d\n%s", code, out)
+	}
+	if out, _ := run(t, "report"); strings.Contains(out, "two weeks in") {
+		t.Fatalf("still asking after a share:\n%s", out)
+	}
+}

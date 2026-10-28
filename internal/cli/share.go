@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 )
 
 // shareThread is the public thread where people post their export --share data, and
@@ -96,5 +97,10 @@ func runShare(args []string, version string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	fmt.Fprintln(stdout, prefix, verb, url)
+	// The report stops suggesting a share. The reply is posted either way, so this can fail.
+	if s, code := openStore(io.Discard); s != nil && code == 0 {
+		s.SetConfig(cfgShared, now().Format(time.DateOnly))
+		s.Close()
+	}
 	return 0
 }

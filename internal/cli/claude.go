@@ -21,12 +21,13 @@ import (
 	"github.com/demetriusk/ciguse/internal/store"
 )
 
-// Config keys for the status line ciguse wrapped and the settings file it wrote, and for
-// whether a report has shown a waiting vs working ratio yet.
+// Config keys for the status line ciguse wrapped and the settings file it wrote, whether a
+// report has shown a waiting vs working ratio yet, and whether the user has shared.
 const (
 	cfgWrapped   = "statusline_wrapped"
 	cfgWritten   = "statusline_written_sha256"
 	cfgRatioSeen = "ratio_seen"
+	cfgShared    = "shared"
 )
 
 // runStatusline prints the ciguse segment for Claude Code's status line. It runs every few
@@ -83,12 +84,7 @@ func segment(s *store.Store, t time.Time, since, ratio bool) (string, error) {
 		return "", err
 	}
 	parts := []string{prefix + " " + bold.Render(fmt.Sprintf("%d today", n))}
-	seen, err := s.Config(cfgRatioSeen)
-	if err != nil {
-		return "", err
-	}
-	ready := !ratio && seen == ""
-	if since || ratio || ready {
+	if since || ratio {
 		first, last, ok, err := s.Span()
 		if err != nil {
 			return "", err
@@ -98,20 +94,47 @@ func segment(s *store.Store, t time.Time, since, ratio bool) (string, error) {
 			if since {
 				parts = append(parts, ago(t.Sub(last))+" since last")
 			}
-			if ratio || ready {
+			if ratio {
 				sp, err := s.Split(t.AddDate(0, 0, -14), t)
 				if err != nil {
 					return "", err
 				}
-				if rr, _, _, ok := rateRatio(sp); ok && ratio {
+				if rr, _, _, ok := rateRatio(sp); ok {
 					parts = append(parts, fmt.Sprintf("waiting %.1f× working", rr))
-				} else if ok {
-					parts = append(parts, "ratio ready: "+accent.Render("ciguse report"))
 				}
 			}
 		}
 	}
+	if !ratio {
+		ready, err := ratioReady(s, t)
+		if err != nil {
+			return "", err
+		}
+		if ready {
+			parts = append(parts, ratioReadyText)
+		}
+	}
 	return strings.Join(parts, muted.Render(" · ")), nil
+}
+
+var ratioReadyText = "ratio ready: " + accent.Render("ciguse report")
+
+// ratioReady reports whether there's a waiting vs working ratio that no report has shown
+// yet. Never in the first week: it's a baseline, with nothing that might work as a cue.
+func ratioReady(s *store.Store, t time.Time) (bool, error) {
+	if seen, err := s.Config(cfgRatioSeen); err != nil || seen != "" {
+		return false, err
+	}
+	first, _, ok, err := s.Span()
+	if err != nil || !ok || t.Sub(first) < 7*24*time.Hour {
+		return false, err
+	}
+	sp, err := s.Split(t.AddDate(0, 0, -14), t)
+	if err != nil {
+		return false, err
+	}
+	_, _, _, ok = rateRatio(sp)
+	return ok, nil
 }
 
 func ago(d time.Duration) string {
