@@ -1,6 +1,6 @@
 # ciguse
 
-Log nicotine use from the terminal and find out whether you use more while your coding agent works or while it waits on you. Works with Claude Code and Codex. Local only: no account, no network, no telemetry.
+Log nicotine use from the terminal and find out whether you use more while your coding agent works or while it waits on you. Works with Claude Code and Codex. Local only: no account, no telemetry, and nothing leaves your machine unless you run `ciguse share`.
 
 ![Setting up ciguse, logging a use, a two-week report on sample data, and the Claude Code status line](docs/demo.gif)
 
@@ -52,7 +52,7 @@ After a week or two, run `ciguse report` to see working vs waiting.
 | `ciguse report` | the last 14 days: working vs waiting, by agent, then uses per day |
 | `ciguse doctor` | something looks off? start here |
 
-Run `ciguse` for everything else: `export --csv`, `export --share`, `project alias`, `purge`, `setup claude --remove`.
+Run `ciguse` for everything else: `export --csv`, `share`, `project alias`, `purge`, `setup claude --remove`.
 
 ## Good to know
 
@@ -106,7 +106,7 @@ Everything lives in one folder, readable only by your user:
 
 Set `CIGUSE_HOME` to use another folder. `ciguse purge` deletes it all.
 
-`ciguse export --share` prints one CSV row per day, safe to post publicly: hours and uses while your agent works or waits, estimated nicotine, and per-agent totals. No project names, paths, prices, times of day or undone uses.
+`ciguse export --share` prints one CSV row per day, safe to post publicly: hours and uses while your agent works or waits, estimated nicotine, and per-agent totals. No project names, paths, prices, times of day or undone uses. `ciguse share` posts it to the [data thread](https://github.com/demetriusk/ciguse/discussions/1) through your GitHub CLI after you say yes, and edits that reply the next time. It's public and shows your GitHub name.
 
 ## License
 

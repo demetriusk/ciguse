@@ -37,6 +37,7 @@ const commands = `  ciguse init             set up: what you use, pack price, da
   ciguse setup codex      plugin for Codex
   ciguse project alias    rename this folder's project in reports
   ciguse export           every use as JSON lines  (--csv, --share)
+  ciguse share            post your day totals to the ciguse data thread
   ciguse doctor           check the setup, show plugin errors
   ciguse purge            delete all data
   ciguse version
@@ -84,6 +85,8 @@ func Run(args []string, version string, stdout, stderr io.Writer) int {
 		return runProject(args[1:], stdout, stderr)
 	case "export":
 		return runExport(args[1:], stdout, stderr)
+	case "share":
+		return runShare(args[1:], version, stdout, stderr)
 	case "doctor":
 		return runDoctor(args[1:], version, stdout, stderr)
 	case "purge":
