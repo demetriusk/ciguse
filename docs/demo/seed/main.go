@@ -1,5 +1,5 @@
-// Seed writes two weeks of sample Claude Code sessions and uses into $CIGUSE_HOME, so the
-// report in docs/demo.gif has something to show. Run it after `ciguse init`, only on a
+// Seed writes 15 days of sample Claude Code sessions and uses into $CIGUSE_HOME, so the
+// report in docs/demo.gif has something to show, the week-to-week nicotine line included. Run it after `ciguse init`, only on a
 // throwaway folder: go run ./docs/demo/seed
 package main
 
@@ -50,8 +50,8 @@ func main() {
 		}
 	}
 
-	y, m, d := now.AddDate(0, 0, -13).Date()
-	for day := range 14 {
+	y, m, d := now.AddDate(0, 0, -14).Date()
+	for day := range 15 {
 		t := time.Date(y, m, d+day, 9, 0, 0, 0, time.Local).Add(mins(0, 40))
 		end := t.Add(9 * time.Hour)
 		for i := 0; t.Before(end) && t.Before(now); i++ {

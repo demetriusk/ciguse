@@ -69,7 +69,8 @@ func TestInitAndReport(t *testing.T) {
 			"the plugins record them: ciguse setup claude, ciguse setup codex\n\n"+
 			"Tue 27 Oct    2  ▆▆  today\n\n"+
 			"value     0.30 EUR  (1 of 2 uses priced)\n"+
-			"nicotine  ≈1.6 mg, like 1.6 cigarettes  (estimate: cigarette 1, iqos 0.6 mg a use)\n")
+			"nicotine  ≈1.6 mg a day, like 1.6 cigarettes\n"+
+			"          estimate: cigarette 1, iqos 0.6 mg a use · a pack a day ≈ 20 mg\n")
 
 	// Days before the first use weren't tracked, so they're left out; a day without uses after it shows as 0.
 	*clock = clock.AddDate(0, 0, -2)
@@ -83,7 +84,8 @@ func TestInitAndReport(t *testing.T) {
 			"Mon 26 Oct    0\n"+
 			"Tue 27 Oct    2  ▆▆  today\n\n"+
 			"value     0.60 EUR  (2 of 3 uses priced)\n"+
-			"nicotine  ≈2.2 mg, like 2.2 cigarettes  (estimate: iqos 0.6, cigarette 1 mg a use)\n")
+			"nicotine  ≈0.7 mg a day, like 0.7 cigarettes\n"+
+			"          estimate: iqos 0.6, cigarette 1 mg a use · a pack a day ≈ 20 mg\n")
 }
 
 func TestInitValidation(t *testing.T) {
@@ -100,7 +102,29 @@ func TestNicotineOverride(t *testing.T) {
 	contains(t, out, "nicotine    pouch ≈0.45 mg a use (a cigarette ≈1 mg; --nicotine to change)")
 	run(t, "use")
 	out, _ = run(t, "report")
-	contains(t, out, "\nnicotine  ≈0.5 mg, like 0.5 cigarettes  (estimate: pouch 0.45 mg a use)\n")
+	contains(t, out, "\nnicotine  ≈0.5 mg a day, like 0.5 cigarettes\n")
+}
+
+// The week-to-week line needs both weeks tracked, and leaves today out: it isn't over.
+func TestNicotineWeekToWeek(t *testing.T) {
+	_, clock := setup(t)
+	today := *clock
+	for _, ago := range []int{10, 3, 0} {
+		*clock = today.AddDate(0, 0, -ago)
+		run(t, "use")
+	}
+	*clock = today
+	out, _ := run(t, "report")
+	if strings.Contains(out, "full days") {
+		t.Fatalf("the week before isn't fully tracked yet:\n%s", out)
+	}
+	*clock = today.AddDate(0, 0, -14)
+	run(t, "use")
+	*clock = today
+	out, _ = run(t, "report")
+	contains(t, out, "\nnicotine  ≈0.2 mg a day\n"+
+		"          last 7 full days ≈0.1 mg a day · the 7 before ≈0.3\n"+
+		"          estimate: cigarette 1 mg a use · a pack a day ≈ 20 mg\n")
 }
 
 func TestParseMoney(t *testing.T) {
@@ -127,5 +151,13 @@ func TestTildePath(t *testing.T) {
 	other := filepath.Join(filepath.Dir(home), "elsewhere", "ciguse.db")
 	if got := tildePath(other); got != other {
 		t.Fatalf("outside home: %q", got)
+	}
+}
+
+func TestRoughMG(t *testing.T) {
+	for ug, want := range map[int64]string{0: "0", 49: "0", 50: "0.1", 7000: "7", 7049: "7", 7050: "7.1", 9949: "9.9", 9950: "10", 10500: "11"} {
+		if got := roughMG(ug); got != want {
+			t.Errorf("roughMG(%d) = %q, want %q", ug, got, want)
+		}
 	}
 }

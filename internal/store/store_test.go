@@ -153,6 +153,30 @@ func TestNicotineSnapshotSurvivesChange(t *testing.T) {
 	}
 }
 
+func TestNicotineWeeks(t *testing.T) {
+	s := open(t)
+	for _, ago := range []int{8, 7, 0} {
+		logAt(t, s, base.AddDate(0, 0, -ago))
+	}
+	r, err := s.Report(base, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.WeeksTracked {
+		t.Fatalf("first use 8 days ago, so the week before isn't tracked: %+v", r)
+	}
+	logAt(t, s, base.AddDate(0, 0, -14))
+	logAt(t, s, base.AddDate(0, 0, -15)) // before both weeks
+	r, err = s.Report(base, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Today is left out; 7 days ago is the last 7 full days, 8 and 14 the week before.
+	if !r.WeeksTracked || r.Weeks != [2]int64{1000, 2000} {
+		t.Fatalf("got %v %v", r.WeeksTracked, r.Weeks)
+	}
+}
+
 // Uses logged before nicotine estimates existed get their product's estimate.
 func TestMigrationBackfillsNicotine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ciguse.db")

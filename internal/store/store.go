@@ -386,6 +386,11 @@ type Report struct {
 	Value    map[string]*big.Rat // currency → total in major units
 	Priced   int                 // uses that had a price
 	Nicotine []Dose              // most uses first
+	// Weeks is estimated nicotine in micrograms over the last 7 full days and the 7 before,
+	// whatever the range; today isn't over, so it's left out. WeeksTracked is true once the
+	// first use falls on or before the earlier week's first day.
+	Weeks        [2]int64
+	WeeksTracked bool
 }
 
 // Report summarises the last days local days, today included.
@@ -401,6 +406,10 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 		d := today.AddDate(0, 0, -i)
 		index[d.Format(time.DateOnly)] = len(r.Days)
 		r.Days = append(r.Days, Day{Date: d})
+	}
+	week := map[string]int{}
+	for i := 1; i <= 14; i++ {
+		week[today.AddDate(0, 0, -i).Format(time.DateOnly)] = (i - 1) / 7
 	}
 
 	var firstTS int64
@@ -419,9 +428,10 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 			r.Active++
 		}
 	}
+	r.WeeksTracked = first <= today.AddDate(0, 0, -14).Format(time.DateOnly)
 
 	// Offsets differ by at most a day, so a two-day margin catches every event in range.
-	since := now.AddDate(0, 0, -days-2).UnixMilli()
+	since := now.AddDate(0, 0, -max(days, 14)-2).UnixMilli()
 	rows, err := s.db.Query(`SELECT ts, utc_offset_min, pack_price_minor, pack_size, currency, product_id, nicotine_ug FROM events
 		WHERE deleted_at IS NULL AND ts >= ?`, since)
 	if err != nil {
@@ -438,7 +448,11 @@ func (s *Store) Report(now time.Time, days int) (Report, error) {
 		if err := rows.Scan(&ts, &offsetMin, &price, &size, &currency, &product, &nicotine); err != nil {
 			return r, err
 		}
-		i, ok := index[localDay(eventTime(ts, offsetMin), st.DayStart)]
+		day := localDay(eventTime(ts, offsetMin), st.DayStart)
+		if w, ok := week[day]; ok && nicotine.Valid {
+			r.Weeks[w] += nicotine.Int64
+		}
+		i, ok := index[day]
 		if !ok {
 			continue
 		}

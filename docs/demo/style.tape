@@ -1,6 +1,6 @@
 # Shared look and a clean shell for every scene. record.sh sets DEMO_HOME and DEMO_BIN.
 Set Shell "bash"
-Set FontSize 18
+Set FontSize 17
 Set Width 1100
 Set Height 900
 Set Padding 32

@@ -248,21 +248,21 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 			ug += d.UG * int64(d.Uses)
 			each[i] = d.Product + " " + formatMG(d.UG)
 		}
-		// An estimate: tenths of a mg below 10, whole mg above.
-		total := strconv.FormatInt((ug+500)/1000, 10)
-		if t := (ug + 50) / 100; t < 100 {
-			total = fmt.Sprintf("%d.%d", t/10, t%10)
-		}
+		day := roughMG(ug / int64(r.Active))
 		// A cigarette gives about 1 mg, so mg reads as cigarettes; it would only repeat a cigarette count.
 		like := ""
 		if slices.ContainsFunc(r.Nicotine, func(d store.Dose) bool { return d.Product != "cigarette" }) {
-			like = ", like " + total + " cigarettes"
-			if total == "1" {
+			like = ", like " + day + " cigarettes"
+			if day == "1" {
 				like = ", like 1 cigarette"
 			}
 		}
-		fmt.Fprintf(stdout, "%s  ≈%s mg%s  %s\n", muted.Render("nicotine"), total, like,
-			muted.Render("(estimate: "+strings.Join(each, ", ")+" mg a use)"))
+		fmt.Fprintf(stdout, "%s  ≈%s mg a day%s\n", muted.Render("nicotine"), day, like)
+		if r.WeeksTracked {
+			fmt.Fprintln(stdout, muted.Render(fmt.Sprintf("          last 7 full days ≈%s mg a day · the 7 before ≈%s",
+				roughMG(r.Weeks[0]/7), roughMG(r.Weeks[1]/7))))
+		}
+		fmt.Fprintln(stdout, muted.Render("          estimate: "+strings.Join(each, ", ")+" mg a use · a pack a day ≈ 20 mg"))
 	}
 	return 0
 }
@@ -522,6 +522,15 @@ func parseMG(s string) (int64, error) {
 
 func formatMG(ug int64) string {
 	return strconv.FormatFloat(float64(ug)/1000, 'f', -1, 64)
+}
+
+// roughMG rounds an estimate in micrograms: tenths of a mg below 10, whole mg above, and
+// no ".0", which would look more precise than an estimate is.
+func roughMG(ug int64) string {
+	if t := (ug + 50) / 100; t < 100 && t%10 != 0 {
+		return fmt.Sprintf("%d.%d", t/10, t%10)
+	}
+	return strconv.FormatInt((ug+500)/1000, 10)
 }
 
 // parseClock turns "04:00" into the duration since midnight.
